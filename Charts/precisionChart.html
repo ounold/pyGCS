@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset=utf-8 />
+    <meta name="viewport" content="user-scalable=no, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0">
+    <title>Precision</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+    <link href="style.css" rel="stylesheet" />
+</head>
+<body>
+    <div class="container">
+        <div class="rules-info">
+            <table>
+                <tr>
+                    <td id="left-arrow" class="left-arrow left-arrow-unused"><</td>
+                    <td id="chosen-trace-name" class="chosen-trace-name"></td>
+                    <td id="right-arrow" class="right-arrow">></td>
+                </tr>
+            </table>
+            <table>
+                <tr>
+                    <td>
+                        <table id="rules-header">
+                            <tr class="full-header-color">
+                                <th>Iteration</th>
+                                <th>Precision</th>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <div id="rules-body" class="rules-body"></div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <div id="graph-container" class="graph-container"></div>
+    </div>
+</body>
+<script src="basic.js"></script>
+<script>
+    init("precision");
+</script>
+</html>

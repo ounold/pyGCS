@@ -1,0 +1,200 @@
+0 11 b a a b b b b b b b a
+0 23 b b a a b a a b b a b a a a a b b a a b b a a
+0 18 b b a a b b a a b b a a a a b b a b
+0 20 b b a b a b a b b a b a b b a a a a b a
+0 12 a a a b a b b b a a b a
+0 11 a b a b a a b b a b b
+0 12 b b b a a a a a b b a b
+1 18 a b a b a a a a b a a b a b b b b b
+1 24 a a a a a a a b a b b a a a a b b b b b b b b b
+0 7 b b a a b a b
+0 10 a b b b a a a b a a
+1 20 a a b a a b b a a a b b a a a b b b b b
+1 20 a a a a b a b a b a a a b a b b b b b b
+0 12 a b a b a b b a a b b a
+0 20 b b a b b a b b b b b b a a a a b a a b
+1 18 a a b b a b a a b a b a b a a b b b
+1 18 a a b a b a a a b b a b a a b b b b
+1 20 a a b a b a a b a a a b a b a b b b b b
+0 12 a a a a a b b b a b a b
+0 19 a a b a b a a a b b a a a b a b a b a
+1 24 a a a a a a b a a a b a a b a b b b b b b b b b
+0 23 b b b a a b b b a b a a a a b a b a a a a a a
+0 25 b b b b b a a b b a a a a b a b b a a b a b b a b
+0 8 b a a b a a b a
+0 12 a b b a b b a a b a b a
+0 19 b b a b a b b b b a b b b a a a a b b
+1 2 a b
+1 18 a a a a b a b a b b a a b a b b b b
+1 24 a a b a a a a a a b a a a b a b b b b b b b b b
+0 18 b b a b a a a a a b b a a b b a a a
+1 20 a a a b a a a b a b b a b a a b b b b b
+1 20 a a a b a b a a a a b a b a b b b b b b
+0 15 a b a a b b b a a b a b a a a
+0 22 a a a a a a a b a b b b b b b b b a a a b a
+1 20 a a a a b b a b a a a b b a a b b b b b
+1 16 a b a a b a b a b b a a b a b b
+1 22 a a a b a b a a b a a b a a a b b b b b b b
+1 20 a b a b a b a a a a a b b a a b b b b b
+1 12 a b a b a b a a b b a b
+0 14 a b a b b a a b a b b a a b
+1 20 a a b a b a b a b a b a a a a b b b b b
+0 16 a a b b a a a b a a b a a a b a
+0 24 a b b b a a a b b a a b a a a a b b a a a b b b
+1 4 a b a b
+1 20 a b a a a a b b a a b b a a a b b b b b
+0 28 a a b b a b b a b a a a a a b a b a b b b a b a b a b b
+0 21 b b a b b b b b b b a b b a a b b a a a a
+1 24 a a a b a a a a a a a a b b a b b b b b b b b b
+1 20 a a b a b a a b a b a a b a a b b b b b
+1 20 a a a b b a a a a b a b a a b b b b b b
+1 18 a b a b a a b a b a b a a b a b b b
+0 1 a
+0 7 b a b b a a a
+0 22 b b b a b b b a a b b a a a b b a b b a a a
+1 16 a b a b a b a a b a a a b b b b
+1 18 a b a b a b a a b a b a b a a b b b
+1 18 a a a b a a b b a a b b a b a b b b
+0 24 b a b a a b b a a a a a b a b b b a a b a b a a
+1 20 a b a a a a b a a b b a b a a b b b b b
+0 5 a b b b a
+0 22 a a a a b b a b b b b b a a a b b b b b b a
+1 22 a b a a a a a a b a b a b a a b b b b b b b
+0 21 a a b a b b a b b a b a b b a b a b b a b
+0 23 b b a a a b a b b a b a a a a a a a a b a b a
+0 26 a b a b b b a b a a a a b b b a a b a a a b b a b b
+0 23 a b a a b a b a b a b a a b a b a a a a a a b
+0 7 b a b a b b a
+0 21 b a b b b a b a b a a b b a a b b b b b b
+1 20 a a b b a a a a a b a b a b a b b b b b
+0 29 a a b b b b b b a a a a a a a b b a b b a a a a a b a b a
+1 6 a b a b a b
+1 18 a a b b a b a b a a a b b a a b b b
+0 27 a a a b b a a a b b b a b a a b a a a b a a b b b a b
+1 20 a a a b b a a a b a a a a b b b b b b b
+0 8 a b a b a a a b
+1 18 a b a b a b a a b a b a a b a b b b
+0 12 a b b b a b b b a b b b
+1 10 a b a b a b a b a b
+0 23 b a a b a a b a b b b b b b a a b a b b a b a
+0 1 b
+1 6 a b a a b b
+0 2 b b
+1 22 a a b b a b a a a a a a b a a b b b b b b b
+0 30 b a b a a b b b a a b b b a b a a b b a a b b a a b a b b a
+1 18 a b a b a b a b a a b a b a a b b b
+0 13 a a b a a a a b b a b b a
+0 23 a a b b a b b b a a b b a b a a b b b b a a a
+0 17 a a a a a a b b a a a b a b b a b
+0 18 a b b b a a a a a a b b b a b a a b
+1 20 a a a b a b b a b a a a b a a b b b b b
+1 20 a a b a b a b a a b a a b a a b b b b b
+1 20 a a b a a b a a a b b a b a a b b b b b
+0 17 b a b a a a b b b b a b b a a a b
+0 8 a b b a b a b a
+1 22 a a b a b a b a a a a b a a a b b b b b b b
+1 22 a a b a b a a a b a b a a a a b b b b b b b
+1 20 a a b b a a b a a a b a a a b b b b b b
+0 18 a a a b b b b a a a a a b b b b b b
+0 20 a b a b a a b b a b a b a a a a a b a b
+0 15 a a a b a a a b b b b b a b a
+1 24 a a a b a a a a b a a a b a a b b b b b b b b b
+0 11 b a b a a a a a a a a
+1 18 a a b a b a b a a b b a b a a b b b
+1 16 a a b b a b a b a b a b a a b b
+1 20 a a a a a a b b b a b a a b a b b b b b
+1 24 a a a a a a b a a a a a b b a b b b b b b b b b
+1 18 a b a a b a b b a a b a a a b b b b
+1 6 a a b a b b
+1 18 a b a b a b a b a a a b a a b b b b
+0 18 a a b a b a a a a b a b a a b b a a
+1 20 a a a b a b a b a a a b a b a b b b b b
+0 13 a b b b b a b a b b b b a
+1 18 a b a a b a b b a b a a a a b b b b
+1 20 a a b a a b a a a b a b a b a b b b b b
+1 24 a a a a a a a a b a b a a a b b b b b b b b b b
+0 17 a b a a b a b a a b b b b a a b b
+1 18 a b a b a a b a b a b a b a a b b b
+0 24 a a a a a b b a b b a a b a b b b b b b a b b a
+0 16 a b b b a a a b a a b a b a b b
+1 20 a a a a b b a a b a b a a a b b b b b b
+1 20 a b a a a b a b a a a b a a b b b b b b
+0 2 a a
+1 8 a a b a a b b b
+1 22 a a a a a b a a b b a a a b a b b b b b b b
+1 22 a a b a b a a b a a a b a a a b b b b b b b
+1 20 a a b a a a a b a a b a b a b b b b b b
+1 18 a a b a a b a a b a b a a b b b b b
+0 25 b a b a a b a a b a b a b b b b b b a a b a a b a
+1 18 a a b a a b b a b a b a a a b b b b
+0 29 b a a a a b a b a a a b b a a a b b b b a b a a a a a b a
+0 12 b b a a b a b b b a b b
+1 24 a b a a a a b a a a a a b a a b b b b b b b b b
+1 22 a a a a b a a b a a b b a a a b b b b b b b
+1 20 a a b a a a a b a b a b a b a b b b b b
+0 8 b a b a b a a a
+0 14 a b b b a a b b b b a a b a
+0 11 b a a b b a b a b a b
+1 20 a b a a a b a a a b a a b a b b b b b b
+0 25 b a a a a a a a b a a a a a a a b b a a b b b a b
+0 5 a a b a a
+1 20 a a b a b a a a b a a b a b a b b b b b
+0 25 a a b a b a a a a b a b a a b a b b b a a a a b a
+1 18 a a b b a a b a b a a b a a b b b b
+1 20 a b a b a a a b a a b a b a a b b b b b
+0 8 b a a a b a a b
+0 8 b a a a b a b a
+1 18 a a b a a a b b b a b a b a a b b b
+0 19 a b a b a b b b a a a a b b b b b b b
+1 8 a a b a b a b b
+0 13 b b a a a b a b b a b b b
+1 16 a b a a b a b a b a b b a a b b
+0 17 b b b a b a b a b a b a b b b b b
+1 10 a a a b b a b a b b
+1 18 a a b a a a b b b a b a a a b b b b
+0 19 a b b a a a a a b a a a a b a b a a b
+1 22 a a a b a a a b a a a a b a b b b b b b b b
+0 5 b b a b a
+0 11 b a b a b a b b b a a
+0 27 a a a a a b a a b b b b a a b b b a a b a b a b a b a
+0 23 b b a b b a b a a a b a a a b a a b b b b b b
+1 18 a b a a b b a a b a b a b a a b b b
+0 6 a a b b a a
+1 18 a a b a b a a a b a a a b b b b b b
+0 22 a b b b b b a b b b b a b b a a b b a b b b
+0 8 a a b a a b a b
+0 27 a a b a a a b a a a b b a a b a a b b a b b b a b a a
+0 9 b b a a b b a a a
+1 20 a a a a b a a b a b a b a b a b b b b b
+1 22 a a a a b a a b a a b a b a a b b b b b b b
+0 28 a b a b b b a a b b a b b b a b a b a b a b b b a b a a
+0 27 b b b a a b a a b a a a a b b b b a a a a a a a a b b
+1 18 a b a a a a b a b a b b b a a b b b
+1 18 a b a a a b b a a a b b a a b b b b
+1 16 a a b a a b a a b b a b a b b b
+1 22 a a a a b a a a b a b a a b a b b b b b b b
+1 18 a b a b a a a b b a a b a b a b b b
+1 20 a b a a a a a b b a a b a b a b b b b b
+1 20 a a a a b b a a b a a b a a b b b b b b
+1 20 a a b b a a a a a a a b b a b b b b b b
+0 3 b b a
+1 20 a a b a a b b a a a b a b a a b b b b b
+0 19 a b b a a b b a b b a a a b a a b a b
+1 22 a a b a a a a b a a a b a b a b b b b b b b
+1 20 a a a b a b a a a b a b a a b b b b b b
+0 5 a a a a a
+1 18 a b a b a b a b a b a a a a b b b b
+1 22 a a b a a a a a b b a a a a b b b b b b b b
+0 28 b a b a b a a b a a b a a a a b a b a a a a b b a a b b
+0 12 a b b a b b b a a a b a
+1 16 a a a b b a b a b a b a a b b b
+0 8 a a b b a a a a
+0 30 b b a a b b b b b b a b a a b b a a b b a a b a a b b b a a
+1 18 a b a a a a b b a b a b a b a b b b
+0 21 a b a b b b a b b b a b a a b b b b b b b
+1 18 a b a a a b b a b a a b b a a b b b
+1 20 a a b a b a b b a a a b a a a b b b b b
+1 20 a a a b a b a b a b a a b a a b b b b b
+0 18 a a a a b a b b a a b a b a a b a b
+0 24 a a b a b a a b a a b a a b b a a a b b a a b a
+0 3 a a b

@@ -1,0 +1,172 @@
+body { 
+    font: 14px helvetica neue, helvetica, arial, sans-serif;
+}
+
+#cy {
+    height: 100%;
+    width: 100%;
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.graph-container {
+    width: 70%;
+    height: 600px;
+    float: right;
+    box-sizing: border-box;
+}
+
+.rules-info {
+    width: 30%;
+    height: 600px;
+    float: left;
+    box-sizing: border-box;
+}
+
+#rules-header th {
+    border: 1px solid #ddd;
+    padding: 5px;
+    text-align: center;
+    width: 25%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#rules-body td, th {
+    border: 1px solid #ddd;
+    padding: 5px;
+    text-align: center;
+}
+
+table {
+    table-layout:fixed;
+    width:100%;
+}
+
+.rules-header {
+    flex: 0 1 25%;
+}
+
+.rules-body {
+    overflow: auto;
+    height: 493px;
+}
+
+.heuristic-th th {
+    background-color: #2ba02c;
+}
+
+.heuristic-td td {
+    background-color: #9fd89f;
+}
+
+.covering-th th {
+    background-color: #ff7f0e;
+}
+
+.covering-td td {
+    background-color: #ecc098;
+}
+
+.init-th th {
+    background-color: #1f76b4;
+}
+
+.init-td td {
+    background-color: #a1c9e6;
+}
+
+.unknown-th th {
+    background-color: #d62829;
+}
+
+.unknown-td td {
+    background-color: #eaadad;
+}
+
+.full-header {
+    width: 25%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chosen-row {
+    background-color: #8fe66d;
+}
+
+.full-header-color {
+    background-color: #c4ba8e;
+}
+
+.added-td td {
+    background-color: #9fd89f
+}
+
+.removed-td td {
+    background-color: #eaadad
+}
+
+.terminal-td td {
+    background-color: #ecc098
+}
+
+.non-terminal-td td {
+    background-color: #a1c9e6
+}
+
+.added-th th {
+    background-color: #2ba02c
+}
+
+.removed-th th {
+    background-color: #d62829
+}
+
+.terminal-th th {
+    background-color: #ff7f0e
+}
+
+.non-terminal-th th {
+    background-color: #1f76b4
+}
+
+.left-arrow {
+    width: 25%;
+    text-align: left;
+    padding-left: 10px;
+    font-size: 20px;
+}
+
+.left-arrow-unused, .left-arrow-unused:hover {
+    color: #fff !important;
+    cursor: auto !important;
+}
+
+.right-arrow {
+    width: 25%;
+    text-align: right;
+    padding-right: 10px;
+    font-size: 20px;
+}
+
+.right-arrow-unused, .right-arrow-unused:hover {
+    color: #fff !important;
+    cursor: auto !important;
+}
+
+.chosen-trace-name {
+    width: 50%;
+    text-align: center;
+    font-size: 20px;
+}
+
+.left-arrow:hover {
+    color: #c4ba8e;
+    cursor: pointer;
+}
+
+.right-arrow:hover {
+    color: #c4ba8e;
+    cursor: pointer;
+}

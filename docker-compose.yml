@@ -1,0 +1,19 @@
+version: '2'
+services:
+  gcs:
+    build: .
+    ports:
+      - "8000:8000"
+      - "8888:8888"
+    networks:
+      gcs-network:
+        ipv4_address: 10.0.0.2
+    container_name: GCS
+
+networks:
+  gcs-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.0.0/24
+          gateway: 10.0.0.1
