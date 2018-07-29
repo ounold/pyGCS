@@ -45,8 +45,8 @@ http://localhost:8000
 
 ### Docker
 First you have to had installed
-* Docker (>= 18.03) - virtual operational system
-* Docker Compose (>= 1.21.1) - manager images and conatiners
+* _**Docker**_ (>= 18.03) - virtual operational system
+* _**Docker Compose**_ (>= 1.21.1) - manager images and conatiners
 
 From root directory run build command
 ~~~
