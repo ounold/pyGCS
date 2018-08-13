@@ -57,11 +57,11 @@ class GeneticAlgorithm(Heuristic):
 
 
     def add_new_pair(self, grammar: Grammar) -> None:
-        new_pair = self.run(grammar)
+        new_pair = self.process(grammar)
         self.set_origin(new_pair)
         self.add_to_grammar(new_pair, grammar)
 
-    def run(self, grammar: Grammar) -> Tuple[Rule, Rule]:
+    def process(self, grammar: Grammar) -> Tuple[Rule, Rule]:
         parents = self.select(grammar)
         children = self.crossover(parents)
 

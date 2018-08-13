@@ -376,3 +376,7 @@ class Grammar:
             self.remove_rule(removed)
             self.__iteration.remove_crowding_rule(removed)
 
+    def set_non_terminal_rules(self, new_rules):
+        self.rulesContainer.terminal_rules = new_rules
+
+

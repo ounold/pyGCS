@@ -30,6 +30,8 @@ class NewCovering(Covering):
 
     def find_left_symbol(self, grammar: Grammar) -> Symbol:
         the_best_rules = self.find_the_best_rules(grammar)
+        if len(the_best_rules) == 0:
+            return RandomUtils.get_random_nonterminal_symbol_from(grammar)
         if self.roulette_selection_enabled:
             return self.find_symbol_by_roulette_selection(the_best_rules)
         else:

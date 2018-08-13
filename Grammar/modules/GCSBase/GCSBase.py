@@ -116,6 +116,7 @@ class GCSBase:
         sim_result = Result()
         self.__logger.info("Start elite number = " + str(self.settings.get_value("crowding", "elite_rules_number")))
 
+        self.ga.reset()
         # main loop
         while not stop_condition:
             # print("Induction step {0} of {1} ({2}%)".format(ev_step, max_step, round(ev_step/max_step*100)))
@@ -156,6 +157,12 @@ class GCSBase:
             if self.settings.get_value('crowding', 'crowding_enabled') == "False":
                 self.grammar.shrink_to_proper_size(self.non_terminal_productions_number)
                 self.refresh_rules_params()
+
+            if self.settings.get_value('genetic_algorithm', 'grammar_restoring_enabled') == "True":
+                self.grammar.rulesContainer.reset_usages_and_points()
+                self.parse_dataset(self.train_data, covering_on=False)
+                self.refresh_rules_params(benchmark=True)
+                self.ga.restore_if_necessary(self.grammar)
 
             # Saving results
             self.__logger.info("Evaluating grammar")

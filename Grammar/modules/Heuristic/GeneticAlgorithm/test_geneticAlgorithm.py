@@ -59,7 +59,7 @@ class TestGeneticAlgorithm(TestCase):
         self.genetic_algorithm.invert = MagicMock()
         self.genetic_algorithm.mutate = MagicMock()
 
-        self.genetic_algorithm.run(self.grammar)
+        self.genetic_algorithm.process(self.grammar)
 
         self.genetic_algorithm.select.assert_called_once_with(self.grammar)
         self.genetic_algorithm.crossover.assert_called_once_with((self.rule_1, self.rule_2))
@@ -275,8 +275,8 @@ class TestGeneticAlgorithm(TestCase):
         self.assertEqual([s_rule_y.count, s_rule_y.positive_count, s_rule_y.negative_count], [10, 20, 30])
 
     def test_add_new_rules(self):
-        self.genetic_algorithm.run = MagicMock(return_value=(self.rule_1, self.rule_2))
+        self.genetic_algorithm.process = MagicMock(return_value=(self.rule_1, self.rule_2))
         self.genetic_algorithm.add_to_grammar = MagicMock()
         self.genetic_algorithm.add_new_rules(self.grammar)
-        self.genetic_algorithm.run.assert_called_once_with(self.grammar)
-        self.genetic_algorithm.run.add_to_grammar((self.rule_1, self.rule_2))
+        self.genetic_algorithm.process.assert_called_once_with(self.grammar)
+        self.genetic_algorithm.process.add_to_grammar((self.rule_1, self.rule_2))
