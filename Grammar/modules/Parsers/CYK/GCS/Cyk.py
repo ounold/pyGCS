@@ -120,7 +120,7 @@ class Cyk(CYKBase):
         evaluation = SingleExampleEvaluation()
         evaluation.m_param = result
         evaluation.m_parsed = result
-        print(evaluation)
+        # print(evaluation)
         evaluation.rules_table = self.rules_table
 
         return evaluation

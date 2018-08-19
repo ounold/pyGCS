@@ -48,6 +48,7 @@ class TestGeneticAlgorithm(TestCase):
         self.random_decision = RandomUtils.make_random_decision_with_probability
         self.random_non_terminal = RandomUtils.get_random_nonterminal_symbol_from
 
+
     def tearDown(self):
         RandomUtils.make_random_decision_with_probability = self.random_decision
         RandomUtils.get_random_nonterminal_symbol_from = self.random_non_terminal
@@ -277,6 +278,6 @@ class TestGeneticAlgorithm(TestCase):
     def test_add_new_rules(self):
         self.genetic_algorithm.run = MagicMock(return_value=(self.rule_1, self.rule_2))
         self.genetic_algorithm.add_to_grammar = MagicMock()
-        self.genetic_algorithm.add_new_rules(self.grammar)
+        self.genetic_algorithm.run(self.grammar)
         self.genetic_algorithm.run.assert_called_once_with(self.grammar)
         self.genetic_algorithm.run.add_to_grammar((self.rule_1, self.rule_2))

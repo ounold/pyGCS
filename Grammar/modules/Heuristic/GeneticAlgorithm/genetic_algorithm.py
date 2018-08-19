@@ -1,6 +1,7 @@
 import copy
 import logging
 import random
+import math
 from enum import Enum
 from typing import Tuple, Dict, List, Set, Callable
 import _pickle as pickle
@@ -45,23 +46,32 @@ class GeneticAlgorithm(Heuristic):
             self.new_rules_number = int(self.settings.get_value('genetic_algorithm', 'new_rules_number'))
             self.new_rules_number_percent_unit = self.settings.get_value('genetic_algorithm',
                                                                          'new_rules_number_percent_unit') == "True"
+            self.const_ga_probability = float(self.settings.get_value('genetic_algorithm', 'const_ga_probability'))
+            self.dynamic_ga_probability_enabled = self.settings.get_value('genetic_algorithm',
+                                                                         'dynamic_ga_probability_enabled') == "True"
 
             self.selection = _GeneticSelection(self.tournament_selection_subpopulation_size)
         else:
             self.selection = _GeneticSelection()
 
-    def add_new_rules(self, grammar: Grammar) -> None:
-        new_rules_number = self.calculate_number_of_rules_to_add(grammar)
-        for i in range(int(new_rules_number / 2)):
-            self.add_new_pair(grammar)
-
+    def run(self, grammar: Grammar) -> None:
+        self.save_grammar_state(grammar)
+        ga_prob = self.get_ga_probability(grammar)
+        if RandomUtils.make_random_decision_with_probability(ga_prob):
+            # print("GA launched")
+            new_rules_number = self.calculate_number_of_rules_to_add(grammar)
+            for i in range(int(new_rules_number / 2)):
+                self.add_new_pair(grammar)
+        else:
+            # print("GA not launched")
+            pass
 
     def add_new_pair(self, grammar: Grammar) -> None:
-        new_pair = self.run(grammar)
+        new_pair = self.process(grammar)
         self.set_origin(new_pair)
         self.add_to_grammar(new_pair, grammar)
 
-    def run(self, grammar: Grammar) -> Tuple[Rule, Rule]:
+    def process(self, grammar: Grammar) -> Tuple[Rule, Rule]:
         parents = self.select(grammar)
         children = self.crossover(parents)
 
@@ -103,10 +113,13 @@ class GeneticAlgorithm(Heuristic):
         is_added = self.crowding.add_rule(grammar, rules[0])
         if is_added:
             self.logger.info("Added rule: {0}".format(str(rules[0])))
+            # print("[Genetic algorithm] Added rule: {0}".format(rules[0].short()))
+
             self.iteration.add_ga_first_rule(self.first_report_rule)
         is_added = self.crowding.add_rule(grammar, rules[1])
         if is_added:
             self.logger.info("Added rule: {0}".format(str(rules[1])))
+            # print("[Genetic algorithm] Added rule: {0}".format(rules[1].short()))
             self.iteration.add_ga_second_rule(self.second_report_rule)
         return
 
@@ -196,6 +209,14 @@ class GeneticAlgorithm(Heuristic):
             else:
                 return round_to_even(self.new_rules_number)
 
+    def get_ga_probability(self, grammar: Grammar) -> float:
+        if self.dynamic_ga_probability_enabled:
+            metrics = grammar.calc_metrics()
+            ga_prob = math.exp(-2 * metrics['F1'])
+            # print("MCC = {}, GA probability = {}".format(metrics['MCC'], ga_prob))
+            return ga_prob
+        else:
+            return self.const_ga_probability
 
 class _GeneticSelection:
 

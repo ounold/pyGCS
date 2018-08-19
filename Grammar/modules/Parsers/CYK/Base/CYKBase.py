@@ -20,12 +20,19 @@ class CYKBase:
         self.final_covering = final_covering
         self.aggressive_covering = aggressive_covering
         self.terminal_covering = terminal_covering
+        self.parsing_sentence_rules = set()
 
 
         if settings is not None:
             self.__base_amount = float(self._settings.get_value('rules', 'base_amount'))
             self.__base_amount_reduction_coefficient = float(
                 self._settings.get_value('rules', 'base_amount_reduction_coefficient'))
+
+    def iteration_generator(self, length, start_value=0):
+        i = start_value
+        while i < length:
+            yield i
+            i += 1
 
     def _init_rules_table(self, sentence_length: int):
         """
@@ -53,7 +60,7 @@ class CYKBase:
         for i in range(len(sentence)):
             self.sequence[i] = SymbolFinder.find_symbol_by_char(self.grammar.terminalSymbols, sentence[i])
 
-    def fill_rules_table_usages(self, current_cell: CellRule, positive: bool):
+    def fill_rules_table_usages(self, current_cell: CellRule, positive: bool, is_result_parsed):
         """
         :param current_cell:
         :param positive:
@@ -67,15 +74,19 @@ class CYKBase:
                 # Check if the rule have already been used in parsing
                 if cell_rule.used_in_parsing:
                     continue
+                self.parsing_sentence_rules.add(cell_rule.rule)
                 # If not update rule's parameters
                 cell_rule.called_number += 1
                 cell_rule.used_in_parsing = True
+
                 if positive:
-                    #self.__logger.info(str(cell_rule.rule) + " usages in proper parsing + 1")
                     cell_rule.rule.usages_in_proper_parsing += 1
+                    if is_result_parsed:
+                        cell_rule.rule.usages_in_proper_parsing_parsed += 1
                 else:
-                    #self.__logger.info(str(cell_rule.rule) + " usages in invalid parsing + 1")
                     cell_rule.rule.usages_in_invalid_parsing += 1
+                    if is_result_parsed:
+                        cell_rule.rule.usages_in_invalid_parsing_parsed += 1
 
                 # Check rule parents and add them to analysis if they exists
                 if cell_rule.cell_1_coordinates is not None:
@@ -102,8 +113,8 @@ class CYKBase:
         Removes every rule which has not been used in parsing
         :param sentence_length:
         """
-        for i in range(sentence_length):
-            for j in range(sentence_length):
+        for i in self.iteration_generator(sentence_length):
+            for j in self.iteration_generator(sentence_length - i):
                 for k in reversed(range(len(self.rules_table[i][j]))):
                     if not self.rules_table[i][j][k].used_in_parsing:
                         self.rules_table[i][j].pop(k)
@@ -132,22 +143,26 @@ class CYKBase:
         :return:
         """
         # For each cell in upper triangle of the cyk table
-        for i in range(1, len(self.sequence)):
-            for j in range(len(self.sequence) - i):
+        sequence_length = len(self.sequence)
+        for i in self.iteration_generator(sequence_length, 1):
+            for j in self.iteration_generator(sequence_length - i):
+                cell_rules_length = len(self.rules_table[i][j])
                 for k in range(i):
+                    parent_1_cell_rules_length = len(self.rules_table[k][j])
+                    parent_2_cell_rules_length = len(self.rules_table[i - k - 1][j + k + 1])
                     # for each rule in the cell [i][j]
-                    for cell_rule_index in range(len(self.rules_table[i][j])):
+                    for cell_rule_index in self.iteration_generator(cell_rules_length):
                         parent_1 = -1
                         parent_2 = -1
                         # Check each rule in the first possible parent of the cell
-                        for parent_rule_index in range(len(self.rules_table[k][j])):
+                        for parent_rule_index in self.iteration_generator(parent_1_cell_rules_length):
                             # Check whether the rule right 1 symbol can be created from checked parent rule
                             if self.rules_table[k][j][parent_rule_index].rule.left.value == \
                                     self.rules_table[i][j][cell_rule_index].rule.right1.value:
                                 parent_1 = parent_rule_index
 
                         # Check each rule in the second posible parent of the cell
-                        for parent_rule_index in range(len(self.rules_table[i - k - 1][j + k + 1])):
+                        for parent_rule_index in self.iteration_generator(parent_2_cell_rules_length):
                             # Check whether the rule right 2 (if exists) can be be created from checked parent rule
                             if self.rules_table[i][j][cell_rule_index].rule.right2 is not None and \
                                             self.rules_table[i - k - 1][j + k + 1][parent_rule_index].rule.left.value \
@@ -156,7 +171,6 @@ class CYKBase:
 
                         # If both parents exists
                         if parent_1 != -1 and parent_2 != -1:
-                            #self.__logger.info("Patents indexes: [{0}][{1}]".format(parent_1, parent_2))
                             self.rules_table[i][j][cell_rule_index].tmp_val = \
                                 self.__compute_new_tmp_value(self.rules_table[k][j][parent_1],
                                                              self.rules_table[i - k - 1][j + k + 1][parent_2])
@@ -177,9 +191,10 @@ class CYKBase:
         :param positive:
         :return:
         """
-        for i in range(len(self.sequence)):
-            for j in range(len(self.sequence)):
-                for k in range(len(self.rules_table[i][j])):
+        sequence_length = len(self.sequence)
+        for i in self.iteration_generator(sequence_length):
+            for j in self.iteration_generator(sequence_length - i):
+                for k in self.iteration_generator(len(self.rules_table[i][j])):
                     if positive is True:
                         self.rules_table[i][j][k].rule.profit += self.rules_table[i][j][k].tmp_val
                     else:

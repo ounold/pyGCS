@@ -1,11 +1,9 @@
 import math
+import multiprocessing
 from collections import deque
-from multiprocessing import Lock, Pool, Queue, cpu_count
+from multiprocessing import Lock, Pool, cpu_count
 from random import randint
 
-import multiprocessing
-
-import time
 
 from modules.Covering import Covering
 from modules.Crowding.crowding import Crowding
@@ -19,6 +17,7 @@ from modules.GCSBase.utils.symbol_utils import SymbolFinder
 from modules.Parsers.CYK.Base.RulesTableCell import RulesTableCell
 from modules.Parsers.CYK.sGCS.CykValues import CykValues
 from modules.Parsers.CYK.sGCS.ProbabilityArrayCell import ProbabilityArrayCell
+from modules.Stochastic.Stochastic import Stochastic
 from modules.Visualisation.iteration import Iteration
 from modules.sGCS.domain.sCellRule import sCellRule
 from modules.sGCS.domain.sRule import sRule
@@ -28,6 +27,17 @@ from settings.settings import Settings
 lock = Lock()
 covering_lock = Lock()
 number_of_jobs = cpu_count()
+
+
+class ParallelData:
+    def __init__(self, manager):
+        self.manager = manager
+        self.jobs_queue = manager.Queue()
+        self.cyk_parsed_cells = manager.dict()
+        self.cyk_probability_array = manager.dict()
+        self.cyk_rules_for_cell = manager.dict()
+        self.rules_list = manager.list()
+        self.values = manager.dict()
 
 
 class CykJobs:
@@ -65,38 +75,37 @@ class Worker:
         self.cyk_jobs_queue = cyk_jobs_queue
 
 
-def cyk_result_ordered_jobs(sentence: str, grammar: sGCSGrammar, is_sentence_positive: bool, is_learning_on: bool,
-                            settings: Settings, crowding: Crowding, iteration: Iteration = None,
-                            start_covering: Covering = None, final_covering: Covering = None,
-                            aggressive_covering: Covering = None, terminal_covering: Covering = None):
-    cyk_values = CykValues(grammar, is_learning_on, sentence, settings, start_covering, final_covering,
+def cyk_result_ordered_jobs_2(sentence: str, grammar: sGCSGrammar, is_sentence_positive: bool, is_learning_on: bool,
+                              settings: Settings, crowding: Crowding, iteration: Iteration = None,
+                              start_covering: Covering = None, final_covering: Covering = None,
+                              aggressive_covering: Covering = None, terminal_covering: Covering = None):
+    manager = multiprocessing.Manager()
+    parallelData = ParallelData(manager)
+    cyk_values = CykValues(parallelData, grammar, is_learning_on, sentence, settings, start_covering, final_covering,
                            aggressive_covering, terminal_covering)
-    cyk_values.positive = is_sentence_positive
     __init_probability_array(cyk_values)
     __init_symbols_sequence(cyk_values)
-    __init_rules_table(cyk_values)
-    __init_first_row(cyk_values, is_sentence_positive, settings)
-    print("parsing sentence")
+    new_first_row_init(cyk_values)
     cyk_values = __parse_sentence(cyk_values)
-    result = __get_result(cyk_values)
-    cyk_values.is_parsed = __is_parsed(result, is_learning_on, settings)
-    cyk_start_cell_rules = cyk_values.rules_table[len(sentence) - 1][0].cell_rules
-    cyk_start_cell_rules_probability = cyk_values.probability_array[len(cyk_values.sequence) - 1][0]
-    print("fill usages")
-    __fill_usages_for_start_cell_rules(cyk_values, cyk_start_cell_rules, is_sentence_positive)
-    print("Removing usages")
-    __remove_unused_cell_rules(cyk_values)
-    print("Fill debts profits")
-    __fill_debts_profits(cyk_values, is_sentence_positive, settings)
-    print("update rules counts")
-    __update_rules_count_after_sentence_parsing(cyk_values, is_learning_on, cyk_start_cell_rules,
-                                                cyk_start_cell_rules_probability, is_sentence_positive, settings)
-    __update_grammars_positives_and_negatives(cyk_values, cyk_values.is_parsed, is_sentence_positive)
-
-    for rule in cyk_values.grammar.get_rules():
-        rule.tmp_used = False
-
-    return __create_evaluation(cyk_values, sentence, result)
+    # result = __get_result(cyk_values)
+    # cyk_values.is_parsed = __is_parsed(result, is_learning_on, settings)
+    # cyk_start_cell_rules = cyk_values.rules_table[len(sentence) - 1][0].cell_rules
+    # cyk_start_cell_rules_probability = cyk_values.probability_array[len(cyk_values.sequence) - 1][0]
+    # print("fill usages")
+    # __fill_usages_for_start_cell_rules(cyk_values, cyk_start_cell_rules, is_sentence_positive)
+    # print("Removing usages")
+    # __remove_unused_cell_rules(cyk_values)
+    # print("Fill debts profits")
+    # __fill_debts_profits(cyk_values, is_sentence_positive, settings)
+    # print("update rules counts")
+    # __update_rules_count_after_sentence_parsing(cyk_values, is_learning_on, cyk_start_cell_rules,
+    #                                             cyk_start_cell_rules_probability, is_sentence_positive, settings)
+    # __update_grammars_positives_and_negatives(cyk_values, cyk_values.is_parsed, is_sentence_positive)
+    #
+    # for rule in cyk_values.grammar.get_rules():
+    #     rule.tmp_used = False
+    #
+    # return __create_evaluation(cyk_values, sentence, result)
 
 
 def __init_rules_probabilities(cyk_values: CykValues):
@@ -108,10 +117,22 @@ def __init_rules_probabilities(cyk_values: CykValues):
 
 
 def __init_probability_array(cyk_values: CykValues):
-    cyk_values.probability_array = [
-        [[cyk_values.default_value for i in range(len(cyk_values.grammar.nonTerminalSymbols))]
-         for j in range(len(cyk_values.sentence))]
-        for k in range(len(cyk_values.sentence))]
+    cyk_values.probability_array = []
+    cyk_values.rules_table = []
+    sentence_length = len(cyk_values.sentence)
+    for i in iteration_generator(sentence_length):
+        cyk_values.probability_array.append([])
+        cyk_values.rules_table.append([])
+        for j in iteration_generator(sentence_length - i):
+            cyk_values.probability_array[i].append([])
+            cyk_values.rules_table[i].append(RulesTableCell())
+            if i > 0 and j < len(cyk_values.sentence) - i:
+                cyk_values.parallelData.jobs_queue.put(CykIndexes(i, j))
+            for k in range(len(cyk_values.grammar.nonTerminalSymbols)):
+                cyk_values.probability_array[i][j].append(cyk_values.default_value)
+            cyk_values.parallelData.cyk_probability_array['{}{}'.format(i, j)] = cyk_values.probability_array[i][j]
+            cyk_values.parallelData.cyk_parsed_cells['{}{}'.format(i, j)] = False
+            cyk_values.parallelData.cyk_rules_for_cell['{}{}'.format(i, j)] = []
 
 
 def __init_symbols_sequence(cyk_values: CykValues):
@@ -126,148 +147,120 @@ def __init_rules_table(cyk_values: CykValues):
                               range(len(cyk_values.sentence))]
 
 
-def __init_first_row(cyk_values: CykValues, is_sentence_positive: bool, settings: Settings):
-    for i in range(len(cyk_values.sequence)):
-        covering = None
-        was = False
-        # TODO: dictionary can fasten this search
-        for rule in cyk_values.grammar.get_rules():
-            if rule.right1 == cyk_values.sequence[i]:
-                rule: sRule = rule
-                was = True
-                __init_cell(cyk_values, i, rule)
-                rule.tmp_used = True
-                cyk_values.rules_table[0][i].cell_rules.append(sCellRule(rule))
-        if not was and is_sentence_positive:
-            if len(cyk_values.sequence) > 1:
-                covering = cyk_values.terminal_covering
-            elif settings.get_value('covering', 'is_start_covering_allowed') == "True":
-                covering = cyk_values.start_covering
-
+def new_first_row_init(cyk_values: CykValues):
+    for i in iteration_generator(len(cyk_values.sequence)):
+        grammar_rules = list(cyk_values.grammar.get_rules())
+        rules = [init_cell(cyk_values, i, rule)
+                 for rule in rules_generator(grammar_rules)
+                 if rule.right1 == cyk_values.sequence[i]]
+        if len(rules) > 0:
+            cyk_values.rules_table[0][i].cell_rules.extend(rules)
+        elif cyk_values.positive:
+            covering = choose_first_row_covering(cyk_values)
             if covering is not None:
                 new_rule = covering.add_new_rule(cyk_values.grammar, cyk_values.sequence[i])
-                new_rule.tmp_used = True
-                __init_cell(cyk_values, i, new_rule)
+                init_cell(cyk_values, i, new_rule)
                 cyk_values.rules_table[0][i].cell_rules.append(sCellRule(new_rule))
         cyk_values.rules_table[0][i].parsed = True
+        cyk_values.parallelData.cyk_parsed_cells['{}{}'.format(0, i)] = 1
+        cyk_values.parallelData.cyk_probability_array['{}{}'.format(0, i)] = cyk_values.probability_array[0][i]
 
 
-def __init_cell(cyk_values: CykValues, index: int, rule: sRule):
+def choose_first_row_covering(cyk_values: CykValues):
+    if len(cyk_values.sequence) > 1:
+        return cyk_values.terminal_covering
+    elif cyk_values.settings.get_value('covering', 'is_start_covering_allowed') == "True":
+        return cyk_values.start_covering
+    return None
+
+
+def init_cell(cyk_values: CykValues, index: int, rule: sRule):
+    rule.tmp_used = True
     rule_left_index = rule.left.index
     cyk_values.probability_array[0][index][rule_left_index] = ProbabilityArrayCell()
-    if cyk_values.mode == "Viterbi":
-        cyk_values.probability_array[0][index][rule_left_index].item_1 = math.log10(rule.probability)
-    else:
-        cyk_values.probability_array[0][index][rule_left_index].item_1 = rule.probability
-        cyk_values.probability_array[0][index][rule_left_index].item_2 = rule.probability
+    cyk_values.probability_array[0][index][rule_left_index].item_1 = rule.probability
+    cyk_values.probability_array[0][index][rule_left_index].item_2 = rule.probability
 
 
 def __parse_sentence(cyk_values: CykValues):
-    sequence_length = len(cyk_values.sentence)
-    jobs = CykJobs()
-    m = multiprocessing.Manager()
-    jobs_queue = m.Queue()
-    cyk_values_queue = m.Queue()
+    cyk_values.parallelData.rules_list.extend(cyk_values.grammar.get_rules())
 
-    for i in range(1, sequence_length):
-        for j in range(sequence_length - i):
-            idx = CykIndexes(i, j)
-            jobs_queue.put(idx)
-            jobs.add_job(idx)
+    threads_arg = [(cyk_values.parallelData.jobs_queue,
+                    cyk_values.parallelData.cyk_parsed_cells,
+                    cyk_values.parallelData.cyk_probability_array,
+                    cyk_values.parallelData.cyk_rules_for_cell,
+                    cyk_values.parallelData.rules_list)
+                   for i in range(number_of_jobs)]
 
-    cyk_values_queue.put(cyk_values)
-
-    threads_arg = [(jobs_queue, cyk_values_queue) for i in range(number_of_jobs)]
     pool = Pool(number_of_jobs)
     pool.starmap(__compute_rule, threads_arg)
     pool.close()
     pool.join()
 
-    return cyk_values_queue.get(block=False)
 
-
-def __compute_rule(jobs_queue, cyk_jobs_queue):
+def __compute_rule(jobs_queue, pc, pr, rt, rules):
     while True:
         try:
             cell_rule_indexes = jobs_queue.get(block=False)
         except:
-            cell_rule_indexes = None
+            return None
 
         if cell_rule_indexes is None:
             return None
 
-        lock.acquire()
-        s_time = time.time()
-        print("Lock acquired")
-        cyk_values = cyk_jobs_queue.get(block=False)
-        cyk_jobs_queue.put(cyk_values)
-        lock.release()
-        e_time = time.time()
-        print("Lock released after: {}".format(e_time - s_time))
-
         i = cell_rule_indexes.i
         j = cell_rule_indexes.j
 
+        rls = list(rules)
         for k in range(i):
-            while not cyk_values.rules_table[k][j].parsed \
-                    and not cyk_values.rules_table[i - k - 1][j + k + 1].parsed:
-                    time.sleep(0.01)
-                    lock.acquire()
-                    cyk_values = cyk_jobs_queue.get(block=False)
-                    cyk_jobs_queue.put(cyk_values)
-                    lock.release()
-            for rule in cyk_values.grammar.get_rules():
+            for rule in rls:
                 if rule.right2 is not None:
                     first_rule_index = rule.right1.index
                     second_rule_index = rule.right2.index
 
-                    if cyk_values.probability_array[k][j][first_rule_index] is not None \
-                            and cyk_values.probability_array[i - k - 1][j + k + 1][second_rule_index] is not None:
+                    while not pc['{}{}'.format(k, j)] and not pc['{}{}'.format(i - k - 1, j + k + 1)]:
+                        continue
+
+                    first_parent_prob = pr['{}{}'.format(k, j)][first_rule_index]
+                    second_parent_prob = pr['{}{}'.format(i - k - 1, j + k + 1)][second_rule_index]
+
+                    if first_parent_prob is not None and second_parent_prob is not None:
                         rule.tmp_used = True
                         rule_left_index = rule.left.index
 
-                        parent_cell_probability = cyk_values.probability_array[k][j][first_rule_index]
-                        parent_cell_2_probability = cyk_values.probability_array[i - k - 1][j + k + 1][
-                            second_rule_index]
-                        current_cell_probability = cyk_values.probability_array[i][j][rule_left_index]
+                        current_cell_probability = pr['{}{}'.format(i, j)]
 
-                        cyk_values.probability_array[i][j][rule_left_index] = \
-                            __calculate_cell(cyk_values, parent_cell_probability, parent_cell_2_probability,
-                                             current_cell_probability, rule)
+                        current_cell_probability[rule_left_index] = Stochastic.new_calculate_cell('BaumWelch', None,
+                                                                                                  first_parent_prob,
+                                                                                                  second_parent_prob,
+                                                                                                  current_cell_probability[
+                                                                                                      rule_left_index],
+                                                                                                  rule)
+                        pr['{}{}'.format(i, j)] = current_cell_probability
                         new_rule = sCellRule(rule, Coordinates(k, j), Coordinates(i - k - 1, j + k + 1))
-
-                        cyk_values.rules_table[i][j].cell_rules.append(new_rule)
-                        cyk_values.rules_table[i][j].parsed = True
-
-        is_rule_occured = __find_if_non_terminal_or_start_rule_occured_in_cell(cyk_values, i, j)
-        # Aggresive and final covering
-        if not is_rule_occured and cyk_values.positive and \
-                        cyk_values.settings.get_value('covering', 'is_full_covering_allowed') == "True":
-            __apply_aggressive_and_final_covering(cyk_values, i, j, cyk_jobs_queue)
-        cyk_values.rules_table[i][j].parsed = True
-        lock.acquire()
-        new_cyk_values = cyk_jobs_queue.get(block=False)
-        new_cyk_values.rules_table[i][j] = cyk_values.rules_table[i][j]
-        cyk_jobs_queue.put(new_cyk_values)
-        lock.release()
+                        ru_table = rt['{}{}'.format(i, j)]
+                        ru_table.append(new_rule)
+                        rt['{}{}'.format(i, j)] = ru_table
+        pc['{}{}'.format(i, j)] = True
 
 
-def __calculate_cell(cyk_values: CykValues, parent_cell_prob: ProbabilityArrayCell,
+def __calculate_cell(parent_cell_prob: ProbabilityArrayCell,
                      parent_cell_2_prob: ProbabilityArrayCell,
-                     cell_prob: ProbabilityArrayCell, rule: Rule) -> ProbabilityArrayCell:
-    if cyk_values.mode == "BaumWelch":
-        cell_probability = __calculate_baum_welch_rule_cell_probability(cyk_values.default_value, cell_prob,
-                                                                        parent_cell_prob,
-                                                                        parent_cell_2_prob, rule)
-    elif cyk_values.mode == "Viterbi":
-        cell_probability = __calculate_viterbi_rule_cell_probability(cyk_values.default_value, cell_prob,
-                                                                     parent_cell_prob,
-                                                                     parent_cell_2_prob, rule)
-    elif cyk_values.mode == "MinProb":
-        cell_probability = __calculate_min_prob_rule_cell_probability(cyk_values.default_value, cell_prob,
-                                                                      parent_cell_prob,
-                                                                      parent_cell_2_prob, rule)
-    return cell_probability
+                     cell_prob: ProbabilityArrayCell, rule: Rule, values) -> ProbabilityArrayCell:
+    pass
+    # if values['mode'] == "BaumWelch":
+    #     return __calculate_baum_welch_rule_cell_probability(None, cell_prob,
+    #                                                         parent_cell_prob,
+    #                                                         parent_cell_2_prob, rule)
+    # elif values['mode'] == "Viterbi":
+    #     return __calculate_viterbi_rule_cell_probability(None, cell_prob,
+    #                                                      parent_cell_prob,
+    #                                                      parent_cell_2_prob, rule)
+    # elif values['mode'] == "MinProb":
+    #     return __calculate_min_prob_rule_cell_probability(None, cell_prob,
+    #                                                       parent_cell_prob,
+    #                                                       parent_cell_2_prob, rule)
+    # raise EnvironmentError('Unknown probability calculation mode')
 
 
 def __calculate_baum_welch_rule_cell_probability(default_value, cell_probability: ProbabilityArrayCell,
@@ -339,23 +332,22 @@ def __calculate_min_prob_rule_cell_probability(default_value, cell_probability: 
     return cell_probability
 
 
-def __find_if_non_terminal_or_start_rule_occured_in_cell(cyk_values: CykValues, i_index: int, j_index) -> bool:
+# TODO: is start symbol non terminal?
+def __find_if_non_terminal_or_start_rule_occured_in_cell(cell_probabilities, i_index: int, values) -> bool:
     """
     Checks whether in the cell [i][j] occured any of the non terminal rules or start rule
     :param i_index:
     :param j_index:
     :return:
     """
-    if i_index != (len(cyk_values.sequence) - 1):
-        for k in range(len(cyk_values.grammar.nonTerminalSymbols)):
-            if cyk_values.probability_array[i_index][j_index][k] is not None:
-                return True
-        return False
+    if i_index != (len(values['sentence']) - 1):
+        non_null_cells = [cell for cell in cell_probabilities if cell is not None]
+        return len(non_null_cells) > 0
     else:
-        return cyk_values.probability_array[i_index][j_index][cyk_values.grammar.get_start_symbol().index] is not None
+        return cell_probabilities[values['start_system_index']] is not None
 
 
-def __apply_aggressive_and_final_covering(cyk_values: CykValues, i: int, j: int, cyk_jobs_queue):
+def __apply_aggressive_and_final_covering(cyk_values: CykValues, i: int, j: int):
     """
     Performs aggressive or final covering on the given cell of the cyk table
     :param i:
@@ -392,8 +384,9 @@ def __apply_aggressive_and_final_covering(cyk_values: CykValues, i: int, j: int,
             new_rule.tmp_used = True
 
             cyk_values.probability_array[i][j][new_rule.left.index] = \
-                __calculate_cell(cyk_values, cyk_values.probability_array[valid_combinations_of_indexes[random]][j]
-                [new_rule.right1.index], cyk_values.probability_array[i - valid_combinations_of_indexes[random] - 1]
+                __calculate_cell(cyk_values.probability_array[valid_combinations_of_indexes[random]][j]
+                                 [new_rule.right1.index],
+                                 cyk_values.probability_array[i - valid_combinations_of_indexes[random] - 1]
                                  [j + valid_combinations_of_indexes[random] + 1][new_rule.right2.index],
                                  cyk_values.probability_array[i][j][new_rule.left.index],
                                  new_rule)

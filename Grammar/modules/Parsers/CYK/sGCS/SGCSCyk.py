@@ -1,21 +1,22 @@
+import _pickle as pickle
+import copy
+import json
 import logging
 import math
-from random import randint
-import _pickle as pickle
-
 import time
+from random import randint
+
+from py4j.java_gateway import JavaGateway
 
 from modules.Covering.Covering import Covering
 from modules.GCSBase.SingleExampleEvaluation import SingleExampleEvaluation
-from modules.GCSBase.domain import Rule
 from modules.GCSBase.domain.Coordinates import Coordinates
-from modules.GCSBase.domain.symbol import Symbol
 from modules.GCSBase.utils.random_utils import RandomUtils
 from modules.Parsers.CYK.sGCS.ProbabilityArrayCell import ProbabilityArrayCell
+from modules.Stochastic.Stochastic import Stochastic
 from modules.sGCS.domain.sCellRule import sCellRule
 from modules.sGCS.domain.sRule import sRule
 from modules.sGCS.sGCS_grammar import sGCSGrammar
-from modules.Stochastic.Stochastic import Stochastic
 from ..Base import CYKBase
 
 
@@ -44,68 +45,125 @@ class SGCSCyk(CYKBase.CYKBase):
     def settings(self):
         return self.__settings
 
+    @property
+    def Stochastic(self):
+        return self.__Stochastic
+
     def cyk_result(self, sentence: str, grammar: sGCSGrammar, positive: bool,
-                   learning_on: bool) -> SingleExampleEvaluation:
+                   learning_on: bool, covering_on: bool, negative_covering: bool) -> SingleExampleEvaluation:
         self.grammar = grammar
+        self.parsing_sentence_rules = set()
         self.learning_on = learning_on
         self.__generated_rules_count = 0
 
-        self.__Stochastic.init_rules_inside_outside_probabilities(self)
-        self.parse_sentence(sentence, positive)
+        self.Stochastic.init_rules_inside_outside_probabilities(self)
+
+
+        self._init_symbol_sequence(sentence)
+
+        if self.settings.get_value('cyk', 'parsing_language') == 'Java':
+            self.java_parse_sentence(sentence)
+        else:
+            self.parse_sentence(sentence, positive, covering_on, negative_covering)
+
         result = self.get_result()
-        is_result_parsed = self.is_parsed(result)
+
+        is_result_parsed = self.is_parsed(result, len(sentence))
         self.__logger.info('Sentence {0} parsed by cyk as positive: {1}.'.format(sentence, is_result_parsed))
-
-        full_rules_table = self.rules_table
-
+        full_rules_table = copy.deepcopy(self.rules_table)
         cyk_start_cell_rules = self.rules_table[len(self.sequence) - 1][0]
         cyk_start_cell_rules_probability = self.probability_array[len(self.sequence) - 1][0]
 
-        self.__fill_usages_for_start_cell_rules(cyk_start_cell_rules, positive)
+        self.__fill_usages_for_start_cell_rules(cyk_start_cell_rules, positive, is_result_parsed)
+
         self._remove_unused_cell_rules(len(sentence))
-        self._fill_debts_profits(sentence, positive)
-        self.__Stochastic.update_rules_count_after_sentence_parsing(self, learning_on, cyk_start_cell_rules,
-                                                                    cyk_start_cell_rules_probability, positive)
+        if self.settings.get_value('general', 'fitness_enabled') == 'True':
+            self._fill_debts_profits(sentence, positive)
+
+        prob = self.Stochastic.update_rules_count_after_sentence_parsing(self, learning_on, cyk_start_cell_rules,
+                                                                         cyk_start_cell_rules_probability, positive)
+
+        grammar.examples_probs.append(prob)
         self.__update_grammars_positives_and_negatives(is_result_parsed, positive)
 
         for rule in self.grammar.get_rules():
             rule.tmp_used = False
+        if self.settings.get_value('general', 'visualization_enable') == 'True':
+            sentence_parsing_data = (sentence, positive, pickle.loads(pickle.dumps(self.rules_table, -1)))
+            self.grammar.iteration.sentence_rules_parsing_data.append(sentence_parsing_data)
 
-        sentence_parsing_data = (sentence, positive, pickle.loads(pickle.dumps(self.rules_table, -1)))
-        self.grammar.iteration.sentence_rules_parsing_data.append(sentence_parsing_data)
+        return self.__create_evaluation(sentence, result, full_rules_table, positive)
 
-        return self.__create_evaluation(sentence, result, full_rules_table)
+    def java_parse_sentence(self, sequence: str):
+        json_grammar = self.grammar.save_to_json()
+        gateway = JavaGateway()
+        cyk = gateway.entry_point
+        cyk_result = cyk.runCyk(sequence, json_grammar)
 
-    def __create_evaluation(self, sentence, result: float, rules_table_copy) -> SingleExampleEvaluation:
-        return SingleExampleEvaluation(result, self.is_parsed(result), self.rules_table, rules_table_copy, sentence)
+        result = json.loads(cyk_result)
+        rt = result['rules_table']
+        pt = result['probability_table']
+
+        for i in range(len(sequence)):
+            for j in range(len(sequence) - i):
+                rules = []
+                pts = []
+                for rule in rt[i][j]['rules']:
+                    rules.append(sCellRule.fromCellRuleDict(rule))
+                rt[i][j] = rules
+                for p in pt[i][j]:
+                    if p['item_1'] != -1 and p['item_2'] != -1:
+                        pts.append(ProbabilityArrayCell(p['item_1'], p['item_2']))
+                    else:
+                        pts.append(self.default_value)
+                pt[i][j] = pts
+        self.rules_table = rt
+        self.probability_array = pt
+
+        if self.learning_on:
+            rules_to_add = result['rules_to_add']
+            for cell_indexes in rules_to_add:
+                self.__apply_aggressive_and_final_covering(cell_indexes['i'], cell_indexes['j'])
+
+    def __create_evaluation(self, sentence, result: float, rules_table_copy, positive) -> SingleExampleEvaluation:
+        return SingleExampleEvaluation(result, self.is_parsed(result, len(sentence)), self.rules_table, rules_table_copy, sentence, positive)
 
     def get_result(self) -> float:
-        if self.mode == 'Viterbi':
-            result = -math.inf
-        else:
-            result = 0.0
+        result = 0.0
+
         for i in range(len(self.grammar.nonTerminalSymbols)):
             if self.grammar.nonTerminalSymbols[i].is_start():
+                if self.probability_array[len(self.sequence) - 1][0][i] != self.default_value:
+                    if self.mode == "Viterbi":
+                        res = 10 ** self.probability_array[len(self.sequence) - 1][0][i].item_1
+                    else:
+                        res = self.probability_array[len(self.sequence) - 1][0][i].item_1
+                    result = result + res
+
+        """
+        for i in range(len(self.rules_table[len(self.sequence) - 1][0])):
+            if self.rules_table[len(self.sequence) - 1][0][i].rule.is_start():
                 if self.probability_array[len(self.sequence) - 1][0][i] != self.default_value:
                     if math.isinf(-result):
                         result = 0.0
                     result = result + self.probability_array[len(self.sequence) - 1][0][i].item_1
+        """
         return result
 
-    def parse_sentence(self, sequence: str, positive: bool):
+    def parse_sentence(self, sequence: str, positive: bool, covering_on, negative_covering):
 
         self.__logger.info('Parsing sentence {0}. Belongs to grammar: {1}'.format(sequence, positive))
 
         sequence_length = len(sequence)
         self._init_probability_array(sequence_length, len(self.grammar.nonTerminalSymbols))
-        self._init_symbol_sequence(sequence)
         self._init_rules_table(sequence_length)
         self.init_first_row(positive)
 
+        s_time = time.time()
         # Iterate through upper triangle of the cyk matrix
-        for i in range(1, sequence_length):
-            for j in range(sequence_length - i):
-                for k in range(i):
+        for i in self.iteration_generator(sequence_length):
+            for j in self.iteration_generator(sequence_length - i):
+                for k in self.iteration_generator(i):
                     for rule in self.grammar.get_rules():
                         if rule.right2 is not None:
                             first_rule_index = rule.right1.index
@@ -121,36 +179,40 @@ class SGCSCyk(CYKBase.CYKBase):
                                 current_cell_probability = self.probability_array[i][j][rule_left_index]
 
                                 self.probability_array[i][j][rule_left_index] = \
-                                    self.__new_calculate_cell(parent_cell_probability, parent_cell_2_probability,
+                                    self.__Stochastic.new_calculate_cell(self.mode, self.default_value, parent_cell_probability, parent_cell_2_probability,
                                                               current_cell_probability, rule)
                                 new_rule = sCellRule(rule, Coordinates(k, j), Coordinates(i - k - 1, j + k + 1))
                                 self.rules_table[i][j].append(new_rule)
-
                 # Check if probability for cell found
                 is_rule_occured = self.__find_if_non_terminal_or_start_rule_occured_in_cell(i, j)
                 # Aggresive and final covering
-                if not is_rule_occured and positive and \
-                                self.__settings.get_value('covering', 'is_full_covering_allowed') == "True":
+                if not is_rule_occured and positive and covering_on and \
+                                self.settings.get_value('covering', 'is_full_covering_allowed') == "True":
                     self.__apply_aggressive_and_final_covering(i, j)
 
     def get_rules_from_rules_table(self):
-        for i in range(len(self.rules_table)):
-            print([str(rule[0].rule) if len(rule) > 0 else "-" for rule in self.rules_table[i]][0:len(self.rules_table)-i])
-        print("\n\n")
-        for i in range(len(self.rules_table)):
-            print([str(rule[0].rule)+" (i: "+str(round(rule[0].inside, 4))+", o: "+str(round(rule[0].outside, 4))+")"
-                   if len(rule) > 0 else "-" for rule in self.rules_table[i]][0:len(self.rules_table)-i])
+        # for i in range(len(self.rules_table)):
+        #     print(["/".join([crule[i].rule.short() for i in range(len(crule))])
+        #            if len(crule) > 0 else "-" for crule in self.rules_table[i]][0:len(self.rules_table) - i])
+        # print("\n")
+        # for i in range(len(self.rules_table)):
+        #     print(["/".join([str(crule[i].rule.probability) for i in range(len(crule))])
+        #            if len(crule) > 0 else "-" for crule in self.rules_table[i]][0:len(self.rules_table) - i])
+        pass
 
-    def is_parsed(self, result: float) -> bool:
+    def is_parsed(self, result: float, l) -> bool:
         if result is None:
             return False
-        # TODO: we use 0 in both cases, but originally it was two different settings
-        if self.learning_on:
-            parsing_threshold = self.parsing_threshold
-        else:
-            parsing_threshold = self.parsing_threshold
+
+        parsing_threshold = self.parsing_threshold
         self.__logger.debug("Result: {:.20f}. Parsing threshold: {:.10f}".format(result, parsing_threshold))
-        return result > parsing_threshold
+
+        if self.settings.get_value("sgcs", "scaled_treshold")  == "True":
+            new_result = result ** (1/l)
+        else:
+            new_result = result
+
+        return new_result > parsing_threshold
 
     def __init_cell(self, index: int, rule: sRule):
         rule_left_index = rule.left.index
@@ -161,117 +223,11 @@ class SGCSCyk(CYKBase.CYKBase):
             self.probability_array[0][index][rule_left_index].item_1 = rule.probability
         self.probability_array[0][index][rule_left_index].item_2 = rule.probability
 
-    def __new_calculate_cell(self, parent_cell_prob: ProbabilityArrayCell, parent_cell_2_prob: ProbabilityArrayCell,
-                             cell_prob: ProbabilityArrayCell, rule: Rule) -> ProbabilityArrayCell:
-        if self.mode == "BaumWelch":
-            cell_probability = self.__calculate_baum_welch_rule_cell_probability(cell_prob,
-                                                                                 parent_cell_prob,
-                                                                                 parent_cell_2_prob, rule)
-        elif self.mode == "Viterbi":
-            cell_probability = self.__calculate_viterbi_rule_cell_probability(cell_prob,
-                                                           parent_cell_prob,
-                                                           parent_cell_2_prob, rule)
-        elif self.mode == "MinProb":
-            cell_probability =  self.__calculate_min_prob_rule_cell_probability(cell_prob,
-                                                            parent_cell_prob,
-                                                            parent_cell_2_prob, rule)
-        return cell_probability
 
-    # TODO: remove completly
-    def __calculate_cell(self, parent_cell_1: Coordinates,
-                         parent_cell_2: Coordinates,
-                         cell_coordinates: Coordinates,
-                         rule: Rule):
 
-        rule_left_index = rule.left.index
-        rule_right_1_index = rule.right1.index
-        rule_right_2_index = rule.right2.index
-        cell_probability = self.probability_array[cell_coordinates.x][cell_coordinates.y][rule_left_index]
-        parent_cell_1_probability = self.probability_array[parent_cell_1.x][parent_cell_1.y][rule_right_1_index]
-        parent_cell_2_probability = self.probability_array[parent_cell_2.x][parent_cell_2.y][rule_right_2_index]
 
-        if self.mode == "BaumWelch":
-            cell_probability = self.__calculate_baum_welch_rule_cell_probability(cell_probability,
-                                                                                 parent_cell_1_probability,
-                                                                                 parent_cell_2_probability, rule)
-        elif self.mode == "Viterbi":
-            cell_probability = self.__calculate_viterbi_rule_cell_probability(cell_probability,
-                                                           parent_cell_1_probability,
-                                                           parent_cell_2_probability, rule)
-        elif self.mode == "MinProb":
-            cell_probability = self.__calculate_min_prob_rule_cell_probability(cell_probability,
-                                                            parent_cell_1_probability,
-                                                            parent_cell_2_probability, rule)
-        self.probability_array[cell_coordinates.x][cell_coordinates.y][rule_left_index] = cell_probability
-
-    def __calculate_baum_welch_rule_cell_probability(self, cell_probability: ProbabilityArrayCell,
-                                                     parent_cell_1_probability: ProbabilityArrayCell,
-                                                     parent_cell_2_probability: ProbabilityArrayCell,
-                                                     rule: sRule) -> ProbabilityArrayCell:
-
-        if cell_probability == self.default_value:
-            cell_probability = ProbabilityArrayCell()
-            cell_probability.item_1 = rule.probability * \
-                                      parent_cell_1_probability.item_1 * \
-                                      parent_cell_2_probability.item_1
-            cell_probability.item_2 = rule.probability * \
-                                      parent_cell_1_probability.item_2 * \
-                                      parent_cell_2_probability.item_2
-        else:
-            cell_probability.item_1 = cell_probability.item_1 + \
-                                      (rule.probability *
-                                       parent_cell_1_probability.item_1 *
-                                       parent_cell_2_probability.item_1)
-            cell_probability.item_2 = cell_probability.item_2 + \
-                                      (rule.probability *
-                                       parent_cell_1_probability.item_2 *
-                                       parent_cell_2_probability.item_2)
-        return cell_probability
-
-    def __calculate_viterbi_rule_cell_probability(self, cell_probability: ProbabilityArrayCell,
-                                                  parent_cell_1_probability: ProbabilityArrayCell,
-                                                  parent_cell_2_probability: ProbabilityArrayCell,
-                                                  rule: sRule):
-        if cell_probability == self.default_value:
-            cell_probability = ProbabilityArrayCell()
-            cell_probability.item_1 = math.log10(rule.probability) + \
-                                      parent_cell_1_probability.item_1 * parent_cell_2_probability.item_1
-
-            cell_probability.item_2 = (rule.probability *
-                                       parent_cell_1_probability.item_2 *
-                                       parent_cell_2_probability.item_2)
-
-        else:
-            cell_probability.item_1 = max(cell_probability.item_1, math.log10(parent_cell_1_probability.item_1 +
-                                                                              parent_cell_2_probability.item_1))
-
-            cell_probability.item_2 = cell_probability.item_2 + (rule.probability *
-                                                                 parent_cell_1_probability.item_2 *
-                                                                 parent_cell_2_probability.item_2)
-        return cell_probability
-
-    def __calculate_min_prob_rule_cell_probability(self, cell_probability: ProbabilityArrayCell,
-                                                   parent_cell_1_probability: ProbabilityArrayCell,
-                                                   parent_cell_2_probability: ProbabilityArrayCell,
-                                                   rule: sRule):
-        if cell_probability == self.default_value:
-            cell_probability = ProbabilityArrayCell()
-            cell_probability.item_1 = min(min(rule.probability * parent_cell_1_probability.item_1),
-                                          parent_cell_2_probability.item_1)
-
-            cell_probability.item_2 = rule.probability * \
-                                      parent_cell_1_probability.item_2 * \
-                                      parent_cell_2_probability.item_2
-        else:
-            cell_probability.item_1 = max(cell_probability.item_1,
-                                          min(min(rule.probability), parent_cell_1_probability.item_1,
-                                              parent_cell_2_probability.item_1))
-            cell_probability.item_2 = cell_probability.item_2 + rule.probability * \
-                                                                parent_cell_1_probability.item_2 * \
-                                                                parent_cell_2_probability.item_2
-        return cell_probability
-
-    def find_matching_rules_in_rules_container(self, i_index, j_index, given_symbol):
+    @staticmethod
+    def find_matching_rules_in_rules_container(rules_table, i_index, j_index, given_symbol):
         """
         Finds all rules in the cell [i_index][j_index] which have the given symbol on the left side
         :param i_index:
@@ -280,15 +236,14 @@ class SGCSCyk(CYKBase.CYKBase):
         :return:
         """
         cellRules = []
-        for i in range(len(self.rules_table[i_index][j_index])):
-            cellRule: sCellRule = self.rules_table[i_index][j_index][i]
-            if cellRule.rule.left == given_symbol:
+        for i in range(len(rules_table[i_index][j_index])):
+            cellRule: sCellRule = rules_table[i_index][j_index][i]
+            if cellRule.rule.left.index == given_symbol.index:
                 cellRules.append(cellRule)
         return cellRules
 
-
     def init_first_row(self, positive: bool):
-        for i in range(len(self.sequence)):
+        for i in self.iteration_generator(len(self.sequence)):
             covering = None
             was = False
             # TODO: dictionary can fasten this search
@@ -298,6 +253,7 @@ class SGCSCyk(CYKBase.CYKBase):
                     self.__init_cell(i, rule)
                     rule.tmp_used = True
                     self.rules_table[0][i].append(sCellRule(rule))
+
             if not was and positive:
                 if len(self.sequence) > 1:
                     covering = self.terminal_covering
@@ -320,7 +276,7 @@ class SGCSCyk(CYKBase.CYKBase):
         """
         new_rule = None
         valid_combinations_of_indexes = []
-        for m in range(i):
+        for m in self.iteration_generator(i):
             tmp_symbols_1 = self.__get_cell_symbols(m, j)
             tmp_symbols_2 = self.__get_cell_symbols(i - m - 1, j + m + 1)
             if len(tmp_symbols_1) > 0 and len(tmp_symbols_2) > 0:
@@ -332,6 +288,7 @@ class SGCSCyk(CYKBase.CYKBase):
                                                 j + valid_combinations_of_indexes[random] + 1)
             index_1 = randint(0, len(symbols_1) - 1)
             index_2 = randint(0, len(symbols_2) - 1)
+            # print("Need rule: {}". format(symbols_1[index_1], symbols_2[index_2]))
             if i is not len(self.sequence) - 1:
                 if RandomUtils.make_random_decision_with_probability(
                         float(self.__settings.get_value('covering', 'aggressive_covering_probability'))):
@@ -347,7 +304,7 @@ class SGCSCyk(CYKBase.CYKBase):
                                           Coordinates(i - valid_combinations_of_indexes[random] - 1,
                                                       j + valid_combinations_of_indexes[random] + 1))
                 self.rules_table[i][j].append(new_cell_rule)
-                self.__calculate_cell(Coordinates(valid_combinations_of_indexes[random], j),
+                self.__Stochastic.calculate_cell(self.mode, self.default_value, self.probability_array, Coordinates(valid_combinations_of_indexes[random], j),
                                       Coordinates(i - valid_combinations_of_indexes[random] - 1,
                                                   j + valid_combinations_of_indexes[random] + 1), Coordinates(i, j),
                                       new_rule)
@@ -390,8 +347,7 @@ class SGCSCyk(CYKBase.CYKBase):
         elif not is_result_parsed and positive:
             self.grammar.falseNegative += 1
 
-
-    def __fill_usages_for_start_cell_rules(self, cyk_start_cell_rules, positive):
+    def __fill_usages_for_start_cell_rules(self, cyk_start_cell_rules, positive, is_result_parsed):
         """
         Check if the parsed sentence contains start symbol if so fill table usages
         :param cyk_start_cell_rules:
@@ -400,6 +356,22 @@ class SGCSCyk(CYKBase.CYKBase):
         """
         for i in range(len(cyk_start_cell_rules)):
             if cyk_start_cell_rules[i].rule.is_start():
-                self.fill_rules_table_usages(cyk_start_cell_rules[i], positive)
+                self.fill_rules_table_usages(cyk_start_cell_rules[i], positive, is_result_parsed)
 
+        for r in self.grammar.get_rules():
+            if positive:
+                r.usage_in_distinct_proper += r in self.parsing_sentence_rules
+                if is_result_parsed:
+                    r.usage_in_distinct_proper_parsed += r in self.parsing_sentence_rules
+            elif not positive:
+                r.usage_in_distinct_invalid += r in self.parsing_sentence_rules
+                if is_result_parsed:
+                    r.usage_in_distinct_invalid_parsed += r in self.parsing_sentence_rules
 
+    def get_coords(self, x):
+        # print(x.rule)
+        cell1 = [x.cell_1_coordinates.x, x.cell_1_coordinates.y]
+        cell2 = [x.cell_2_coordinates.x, x.cell_2_coordinates.y]
+        rules_cell1 = [r.rule.short() for r in self.rules_table[cell1[0]][cell1[1]]]
+        rules_cell2 = [r.rule.short() for r in self.rules_table[cell2[0]][cell2[1]]]
+        return [rules_cell1, rules_cell2]

@@ -4,6 +4,8 @@ from modules.Covering.CoveringUtils.covering_determiner import CoveringDetermine
 from modules.Crowding.crowding_determiner import CrowdingDeterminer
 from modules.GCSBase.GCSBase import GCSBase
 from modules.Heuristic.GeneticAlgorithm.genetic_algorithm import GeneticAlgorithm
+from modules.Heuristic.HeuristicDeterminer import HeuristicDeterminer
+from modules.Heuristic.SplitAndMerge.split_and_merge import SplitAndMerge
 from modules.Parsers.CYK.sGCS.SGCSCyk import SGCSCyk
 from modules.Stochastic.Stochastic import Stochastic
 from modules.sGCS.sGCS_grammar import sGCSGrammar
@@ -26,8 +28,8 @@ class sGCS(GCSBase):
                       terminal_covering=self.__terminal_covering,
                       final_covering=self.__final_covering,
                       start_covering=self.__start_covering)
-        heuristic = GeneticAlgorithm(self.__crowding, self.__settings)
 
+        heuristic = HeuristicDeterminer.get_heuristic(self.__settings, self.__crowding)
         super().__init__(settings, self.__grammar, heuristic, cyk, self.__crowding,
                          aggressive_covering=self.__aggressive_covering,
                          terminal_covering=self.__terminal_covering,
@@ -36,4 +38,4 @@ class sGCS(GCSBase):
         self.__logger = logging.getLogger("sgcs")
         self.__logger.info("SGCS Module inited.")
         self.__logger.info(self.grammar)
-        self.__stochastic = Stochastic(self.__settings)
+        self.__grammar.stochastic = Stochastic(self.__settings, cyk)

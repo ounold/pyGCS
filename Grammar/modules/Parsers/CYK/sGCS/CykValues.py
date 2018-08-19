@@ -4,7 +4,7 @@ from settings.settings import Settings
 
 
 class CykValues:
-    def __init__(self, grammar: sGCSGrammar, is_learning_on: bool, sentence: str, settings: Settings,
+    def __init__(self, parallelData, grammar: sGCSGrammar, is_learning_on: bool, sentence: str, settings: Settings,
                  start_covering: Covering = None, final_covering: Covering = None,
                  aggressive_covering: Covering = None, terminal_covering: Covering = None):
         self.grammar = grammar
@@ -22,3 +22,9 @@ class CykValues:
         self.final_covering = final_covering
         self.aggressive_covering = aggressive_covering
         self.terminal_covering = terminal_covering
+        self.parallelData = parallelData
+        self.parallelData.values['sentence'] = self.sentence
+        self.parallelData.values['start_system_index'] = self.grammar.get_start_symbol().index
+        self.parallelData.values['positive'] = self.positive
+        self.parallelData.values['full_covering_allowed'] = self.settings.get_value('covering',
+                                                                        'is_full_covering_allowed') == "True"

@@ -2,7 +2,7 @@ from ..domain.types.SymobolType import SymbolType
 
 
 class Symbol:
-    def __init__(self, value: str = None, symbol_type: SymbolType = None, index: int = None):
+    def __init__(self, value: str = None, symbol_type: SymbolType = None, index: int = None, *args):
         self.value = value
         self.symbol_type = symbol_type
         # Index added for performance improvement
@@ -20,9 +20,23 @@ class Symbol:
     def is_universal(self):
         return self.symbol_type == SymbolType.ST_UNIVERSAL
 
+    def json_str(self):
+        json_value = dict()
+        json_value['value'] = self.value
+        json_value['index'] = self.index
+        return json_value
+
+    @staticmethod
+    def from_dict(symbol):
+        return Symbol(symbol['value'], None, symbol['index'])
+
     def __eq__(self, other):
         if type(self) is type(other):
-            return (self.value, self.symbol_type) == (other.value, other.symbol_type)
+            if self.symbol_type == SymbolType.ST_TERMINAL:
+                return self.value == other.value
+            else:
+                #return self.index == other.index
+                return (self.value, self.symbol_type) == (other.value, other.symbol_type)
         else:
             return False
 

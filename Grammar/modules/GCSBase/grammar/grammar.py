@@ -1,5 +1,7 @@
 import logging
 import random
+import json
+
 from string import ascii_uppercase
 from typing import List
 
@@ -9,7 +11,7 @@ from modules.GCSBase.domain.symbol import SymbolType
 from modules.Loader.test_data import TestData
 from .RulesContainer import RulesContainer
 from ..domain.symbol import Symbol
-from ...Stochastic.Stochastic import Stochastic
+
 
 
 class Grammar:
@@ -31,10 +33,22 @@ class Grammar:
             json_data = f.read()
             self.__dict__ = jsonpickle.decode(json_data)
 
-
     def save_to_json(self):
-        with open("grammar.json", "w") as f:
-            f.write(jsonpickle.encode(self))
+        terminal_symbols = []
+        non_terminal_symbols = []
+        terminal_rules = []
+        non_terminal_rules = []
+        for terminal in self.terminalSymbols:
+            terminal_symbols.append(terminal.json_str())
+        for non_terminal in self.nonTerminalSymbols:
+            non_terminal_symbols.append(non_terminal.json_str())
+        for terminal_rule in self.rulesContainer.terminal_rules:
+            terminal_rules.append(terminal_rule.json_str())
+        for non_terminal_rule in self.rulesContainer.non_terminal_rules:
+            non_terminal_rules.append(non_terminal_rule.json_str())
+        result = {"terminalSymbols": terminal_symbols, "nonTerminalSymbols": non_terminal_symbols,
+                  "terminalRules": terminal_rules, "nonTerminalRules": non_terminal_rules}
+        return json.dumps(result, indent=4)
 
     # TODO: not used except tests
     def symbol_index(self, symbol: Symbol) -> int:
@@ -136,7 +150,7 @@ class Grammar:
         rules_handling_type = self.settings.get_value("general", "aaa_rules_handling_type")
 
         # Productivity
-        for rule in self.get_rules():
+        for rule in self.get_terminal_rules():
             if rule.is_terminal(rules_handling_type):
                 used_symbols.add(rule.left)
                 used_rules.add(rule)
@@ -155,6 +169,7 @@ class Grammar:
                 if not rule.is_terminal(rules_handling_type):
                     used_symbols.add(rule.right1)
                     used_symbols.add(rule.right2)
+                    used_symbols.add(rule.left)
 
             if len(used_symbols) == prev_s_count and len(used_rules) == prev_r_count:
                 break
@@ -215,6 +230,7 @@ class Grammar:
 
         for rule in deleted_rules:
             self.__logger.info("Removing" + str(rule))
+            # print("Removing {}".format(rule.short()))
             self.remove_rule(rule)
 
         for s in deleted_symbols:
@@ -268,32 +284,70 @@ class Grammar:
             forbidden_rules = self.settings.get_value("general", "forbidden_rules").split(';')
             for r in forbidden_rules:
                 self.rulesContainer.forbidden_rules.append(self.get_rule_rand_non_terminal_rule(
-                                                         Symbol(r[0], SymbolType.ST_NON_TERMINAL),
-                                                         Symbol(r[3], SymbolType.ST_NON_TERMINAL),
-                                                         Symbol(r[4], SymbolType.ST_NON_TERMINAL)))
+                                                         Symbol(r[0], SymbolType.ST_NON_TERMINAL if r[0] != "$" else SymbolType.ST_START),
+                                                         Symbol(r[3], SymbolType.ST_NON_TERMINAL if r[3] != "$" else SymbolType.ST_START),
+                                                         Symbol(r[4], SymbolType.ST_NON_TERMINAL if r[4] != "$" else SymbolType.ST_START)))
         # Adding self-defined rules
         if self.settings.get_value("general", "initialize_with_defined_rules") == "True":
             rules_to_add = self.settings.get_value("general", "initialization_rules").split(';')
-            for i in rules_to_add:
-                rule_to_add = None
-                while rule_to_add is None or self.rulesContainer.does_rule_exists(rule_to_add):
+            if rules_to_add[0]:
+
+                for i in rules_to_add:
+                    terminal_rule = True if len(i) == 4 else False
+                    rule_to_add = i
                     symbols = []
-                    for s in [i[0], i[3], i[4]]:
-                        s_type = SymbolType.ST_START if s == "$" else SymbolType.ST_NON_TERMINAL
-                        symbols.append(Symbol(s, s_type, len(self.nonTerminalSymbols)))
-                        if n_term_symbol not in self.nonTerminalSymbols:
-                            self.nonTerminalSymbols.append(n_term_symbol)
-                            self.symbols.append(n_term_symbol)
-                    rule_to_add = self.get_rule_rand_non_terminal_rule(self.nonTerminalSymbols[
-                                                                           self.nonTerminalSymbols.index(symbols[0])],
-                                                                       self.nonTerminalSymbols[
-                                                                           self.nonTerminalSymbols.index(symbols[1])],
-                                                                       self.nonTerminalSymbols[
-                                                                           self.nonTerminalSymbols.index(symbols[2])])
+                    rule_symbols = [i[0], i[3]] if terminal_rule else [i[0], i[3], i[4]]
+                    for j in range(len(rule_symbols)):
+                        if rule_symbols[j] == "$":
+                            s_type = SymbolType.ST_START
+                        elif j > 0 and terminal_rule:
+                            s_type = SymbolType.ST_TERMINAL
+                        else:
+                            s_type = SymbolType.ST_NON_TERMINAL
+                        if j > 0 and terminal_rule:
+                            symbol = Symbol(rule_symbols[j], s_type)
+                            symbols.append(symbol)
+                            if symbol not in self.terminalSymbols:
+                                self.terminalSymbols.append(symbol)
+                                self.symbols.append(symbol)
+                        else:
+                            symbol = Symbol(rule_symbols[j], s_type, len(self.nonTerminalSymbols))
+                            symbols.append(symbol)
+                            if symbol not in self.nonTerminalSymbols:
+                                self.nonTerminalSymbols.append(symbol)
+                                self.symbols.append(symbol)
+                    if terminal_rule:
+                        rule_to_add = self.get_rule_rand_non_terminal_rule(self.nonTerminalSymbols[
+                                                                               self.nonTerminalSymbols.index(symbols[0])],
+                                                                           self.terminalSymbols[
+                                                                               self.terminalSymbols.index(symbols[1])],
+                                                                           None)
+                    else:
+                        rule_to_add = self.get_rule_rand_non_terminal_rule(self.nonTerminalSymbols[
+                                                                               self.nonTerminalSymbols.index(symbols[0])],
+                                                                           self.nonTerminalSymbols[
+                                                                               self.nonTerminalSymbols.index(symbols[1])],
+                                                                           self.nonTerminalSymbols[
+                                                                               self.nonTerminalSymbols.index(symbols[2])])
                     rule_to_add.origin = RuleOrigin.INITIALIZATION
                     rule_to_add.is_removable = True
+                    rule_to_add.age = 1
+                    if not self.rulesContainer.does_rule_exists(rule_to_add):
+                        self.add_rule(rule_to_add)
 
-                self.add_rule(rule_to_add)
+
+        # Adding random terminal productions
+        if self.settings.get_value("general", "initialize_with_random_rules") == "True":
+            nt_rules_number = len(self.get_non_terminal_rules())
+            for i in range(int(self.settings.get_value("general", "each_terminal_productions_number"))):
+                for s in self.terminalSymbols:
+                    rule_to_add = None
+                    while rule_to_add is None or self.rulesContainer.does_rule_exists(rule_to_add):
+                        rule_to_add = self.get_rule_rand_non_terminal_rule(random.choice(self.nonTerminalSymbols), s, None)
+                        rule_to_add.origin = RuleOrigin.INITIALIZATION
+                        rule_to_add.age = 1
+                    self.add_rule(rule_to_add)
+
 
         # Adding random nonterminal productions
         if self.settings.get_value("general", "initialize_with_random_rules") == "True":
@@ -305,6 +359,7 @@ class Grammar:
                                                                        random.choice(self.nonTerminalSymbols),
                                                                        random.choice(self.nonTerminalSymbols))
                     rule_to_add.origin = RuleOrigin.INITIALIZATION
+                    rule_to_add.age = 1
                 self.add_rule(rule_to_add)
         #self.correct_grammar()
 
@@ -328,10 +383,11 @@ class Grammar:
         return self.rulesContainer.iteration
 
     def add_rule(self, rule: Rule) -> None:
-        if rule not in self.rulesContainer.forbidden_rules:
-            self.rulesContainer.add_rule(rule)
+        # print("[Grammar] Adding rule rule: {}->{}{} origin={}".format(rule.left, rule.right1, rule.right2, rule.origin))
+        self.rulesContainer.add_rule(rule)
 
     def remove_rule(self, rule: Rule) -> None:
+        # print("[Grammar] Removing rule: {}->{}{}".format(rule.left, rule.right1, rule.right2))
         self.rulesContainer.remove_rule(rule)
 
     def get_rules(self):
@@ -376,3 +432,16 @@ class Grammar:
             self.remove_rule(removed)
             self.__iteration.remove_crowding_rule(removed)
 
+    def calc_metrics(self):
+        TP = self.truePositive
+        TN = self.trueNegative
+        FP = self.falsePositive
+        FN = self.falseNegative
+        metrics = dict()
+        metrics['Sensitivity'] = 0 if (TP + FN) == 0 else TP / (TP + FN)
+        metrics['Specificity'] = 0 if (TN + FP) == 0 else TN / (TN + FP)
+        metrics['F1'] = 0 if (2*TP + FP + FN) == 0 else 2 * TP / (2*TP + FP + FN)
+        metrics['MCC'] = 0 if ((TP + FP)*(TP + FN)*(TN + FP)*(TN+FN))**(1/2) == 0 else \
+            ((TP * TN) - (FP * FN)) / ((TP + FP)*(TP + FN)*(TN + FP)*(TN+FN))**(1/2)
+
+        return metrics

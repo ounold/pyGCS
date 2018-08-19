@@ -15,7 +15,7 @@ class Settings:
         self.nonUsedRuleFitness = 0.5
         self.weightClassicFitness = 1.0
 
-    def get_value(self, section, key):
+    def get_value(self, section: object, key: object) -> object:
         try:
             value = self.__config_parser.get(section=section, option=key)
             # self.__logger.debug("Getting section {0} and key {1}. Value of key: {2}".format(section , key, value))

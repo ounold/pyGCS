@@ -13,14 +13,12 @@ from modules.GCSBase.grammar.Results import Results
 from modules.GCSBase.grammar.grammar import Grammar
 from modules.Heuristic.Heuristic import Heuristic
 from modules.Loader.test_data import TestData
-from modules.Parsers.CYK.sGCS.ParallelCykOrderedJobs import cyk_result_ordered_jobs
 from modules.Visualisation.iteration import Iteration
 from modules.Visualisation.result import Result
 from modules.sGCS.domain.sRule import sRule
 from modules.sGCS.sGCS_grammar import sGCSGrammar
 from settings.settings import Settings
 import pickle
-from modules.Visualisation.raport_generator import ReportGenerator
 
 
 class GCSBase:
@@ -56,6 +54,7 @@ class GCSBase:
         self.is_start_covering_allowed = self.settings.get_value('covering', 'is_start_covering_allowed')
         self.is_terminal_covering_allowed = self.settings.get_value('covering', 'is_terminal_covering_allowed')
         self.is_ga_allowed = self.settings.get_value('genetic_algorithm', 'is_ga_allowed')
+        self.negative_covering = self.settings.get_value('covering', 'negative_covering') == "True"
 
         self.non_terminal_productions_number = int(
             self.settings.get_value('general', 'non_terminal_productions_number'))
@@ -116,11 +115,23 @@ class GCSBase:
         sim_result = Result()
         self.__logger.info("Start elite number = " + str(self.settings.get_value("crowding", "elite_rules_number")))
 
+        self.ga.reset()
         # main loop
         while not stop_condition:
+            # print("************************************************************************************")
             # print("Induction step {0} of {1} ({2}%)".format(ev_step, max_step, round(ev_step/max_step*100)))
             iteration = Iteration()
+            iteration.add_rules(list(self.grammar.get_rules()))
+            self.set_iteration(iteration)
             start_time = time.time()
+
+            # Genetic algorithm
+            if self.settings.get_value("genetic_algorithm", "is_ga_allowed") == "True" and \
+                            len(self.grammar.rulesContainer.non_terminal_rules) > 0:
+                # print("[process] Running GA")
+                self.ga.run(self.grammar)
+                self.__logger.info("[process] Refreshing rules")
+                self.grammar.correct_grammar()
 
             # Grammar induction
             self.__logger.info("[process] grammar induction start, step " + str(ev_step + 1))
@@ -134,28 +145,11 @@ class GCSBase:
 
             self.grammar.rulesContainer.make_rules_older()
 
-
-            # Genetic algorithm
-            if self.settings.get_value("genetic_algorithm", "is_ga_allowed") == "True" and \
-                            len(self.grammar.rulesContainer.non_terminal_rules) > 0:
-                self.__logger.info("[process] Running GA")
-                self.ga.add_new_rules(self.grammar)
-                self.__logger.info("[process] Refreshing rules")
-                self.refresh_rules_params()
-
-            # Correction of grammar
-            if self.settings.get_value("general", "is_grammar_correction_allowed") == "True":
-                self.__logger.info("[process] Correcting grammar")
-                self.grammar.correct_grammar()
-                self.refresh_rules_params()
-
-            if self.settings.get_value("general", "remove_parsing_only_negative_rules_at_end_of_iteration") == "True":
-                self.grammar.remove_bad_rules()
-                self.refresh_rules_params()
-
-            if self.settings.get_value('crowding', 'crowding_enabled') == "False":
-                self.grammar.shrink_to_proper_size(self.non_terminal_productions_number)
-                self.refresh_rules_params()
+            if self.settings.get_value('genetic_algorithm', 'grammar_restoring_enabled') == "True":
+                self.grammar.rulesContainer.reset_usages_and_points()
+                self.parse_dataset(self.train_data, covering_on=False)
+                self.refresh_rules_params(benchmark=True)
+                self.ga.restore_if_necessary(self.grammar)
 
             # Saving results
             self.__logger.info("Evaluating grammar")
@@ -166,10 +160,12 @@ class GCSBase:
             if self.settings.get_value("general", "allow_adaptive_elitism") == "True":
                 self.adjust_elite_rules_number(iteration)
 
+            """
             # TODO - w oryginale tutaj jest obiekt MySettings, wszędzie indziej workingCopySettings
             if self.settings.get_value("general", "allow_lock_removal_algorithm") == "True" and \
                     self.handle_lock_if_occurred(sim_result.get_last_iteration(), iteration):
                 self.evaluate_grammar_and_save_results_to_iteration(iteration)
+            """
 
             iteration.set_final_production_number(len(self.grammar.rulesContainer.terminal_rules),
                                                   len(self.grammar.rulesContainer.non_terminal_rules),
@@ -191,10 +187,13 @@ class GCSBase:
                 sim_result.add_iteration(pickled_iteration)
 
             # Checking for stop condition
+            met = self.grammar.calc_metrics()
+            Sens = met["Sensitivity"]
+            Spec = met["Specificity"]
             stop_condition = (ev_step == int(self.settings.get_value("general", "max_evolutionary_steps")) or
                               self.settings.get_value("general",
                                                       "is_perfectly_fit_stop_condition_allowed") == "True" and
-                              self.grammar.is_grammar_perfectly_fit(len(self.train_data)))
+                              self.grammar.is_grammar_perfectly_fit(len(self.train_data)) or Sens > 0.9 and Spec > 0.9)
             self.__logger.info('Stop condition: {0}'.format(str(stop_condition)))
 
             end_time = time.time()
@@ -206,16 +205,12 @@ class GCSBase:
             widget_process.description = "Calculating {}/{}:".format(ev_step, max_step)
         widget_process.description = "Done {}/{}".format(max_step, max_step)
         widget_process.bar_style = "success"
-        report_generator = ReportGenerator(sim_result, self.__settings)
-
         if self.settings.get_value("general", "remove_grammar_unused_rules_after_learning") == "True":
             self.grammar.remove_unused_rules_and_symbols()
 
         self.grammar.correct_grammar()
         if isinstance(self.grammar, sGCSGrammar):
-            self.grammar.normalize_grammar()
-
-        # self.benchmark_run(test=True)
+            self.normalize_grammar()
 
         sim_result.final_grammar = self.grammar
         sim_result.settings = self.settings
@@ -224,17 +219,34 @@ class GCSBase:
             self.on_iteration_ended(self.last_results, 1, 1)
         if self.on_learning_ended is not None:
             self.on_learning_ended(self.last_results)
-
         final_rules = list(self.grammar.get_rules())
         final_rules.sort(key=lambda x: str(x.left), reverse=True)
-        report_generator.generate_final_tree(final_rules)
-        report_generator.generate_final_parse_tree(final_rules)
+        self.benchmark_run(test=True)
 
         # print("Final rules")
         # for r in final_rules:
-        #     print(r)
+        #     print("{}, {}".format(r.short(), round(r.probability, 2)))
+        #
+        # print("Evolutionary steps = {}".format(ev_step))
+        return sim_result, final_rules
 
+        print("Evolutionary steps = {}".format(ev_step))
         return sim_result
+
+    def correct_grammar(self):
+        # Correction of grammar
+        if self.settings.get_value("general", "is_grammar_correction_allowed") == "True":
+            print("[process] Correcting grammar")
+            self.grammar.correct_grammar()
+
+        if self.settings.get_value("general", "remove_parsing_only_negative_rules_at_end_of_iteration") == "True":
+            print("[process] Removing bad rules")
+            self.grammar.remove_bad_rules()
+
+        if self.settings.get_value('crowding', 'shrinking_enabled') == "True":
+            print("[process] Shrinking")
+            self.grammar.shrink_to_proper_size(self.non_terminal_productions_number)
+        self.normalize_grammar()
 
     def random_fitness(self):
         for rule in self.grammar.get_rules():
@@ -274,31 +286,56 @@ class GCSBase:
         self.__logger.info('elite rules number = {}'.format(elite_rules_number))
 
     def normalize_grammar(self):
-        pass
+        self.grammar.normalize_grammar()
 
     def grammar_induction(self, iteration_to_fill, benchmark=False, test=False):
         self.grammar.rulesContainer.reset_usages_and_points()
         #self.grammar.reset_grammar()
-        iteration_to_fill.add_rules(list(self.grammar.get_rules()))
+        # iteration_to_fill.add_rules(list(self.grammar.get_rules()))
 
         self.result_map = dict()
-        self.set_iteration(iteration_to_fill)
-
+        # self.set_iteration(iteration_to_fill)
         # parse every sentence
         if test:
             examples = self.test_data
         else:
             examples = self.train_data
 
+        if benchmark:
+            self.parse_dataset(examples, covering_on=False)
+        else:
+            # print("[Grammar Induction] Parsing with covering on")
+            self.parse_dataset(examples, covering_on=True)
+            self.correct_grammar()
+            #for r in self.grammar.get_rules(): print(r)
+            #self.refresh_rules_params(benchmark)
+            # print("[Grammar Induction] Parsing with covering off and estimating probs")
+            # print("Number of rules in grammar: {}".format(len(self.grammar.get_rules())))
+            for i in range(10):
+                # print("\nEM iteration: {}".format(i))
+                self.grammar.rulesContainer.reset_usages_and_points()
+                self.parse_dataset(examples, covering_on=False)
+                self.refresh_rules_params(benchmark)
+            self.normalize_grammar()
+                #for r in self.grammar.get_rules(): print(r)
+                #self.parse_dataset(examples, covering_on=False)
+
+    def parse_dataset(self, examples,  covering_on):
+        self.grammar.reset_grammar()
         count_positives = 0
         count_negatives = 0
+
+        sum_pos_prob = 0
+        sum_neg_prob = 0
+        sum_pos_parsed = 0
+        sum_neg_parsed= 0
         for example in examples:
             if example.positive:
                 count_positives += 1
             else:
                 count_negatives += 1
-
-            result = self.cyk.cyk_result(example.sequence, self.grammar, example.positive, self.learning_mode)
+            result = self.cyk.cyk_result(example.sequence, self.grammar, example.positive,
+                                         self.learning_mode,  covering_on, self.negative_covering)
             # result = cyk_result_ordered_jobs(example.sequence, self.grammar, example.positive, self.learning_mode,
             #                                  self.settings, None, iteration_to_fill,
             #                                  self.start_covering, self.final_covering, self.aggressive_covering,
@@ -308,23 +345,34 @@ class GCSBase:
             if self.on_example_processing_ended is not None:
                 self.on_example_processing_ended(example, result.mParsed, examples.count)
             self.result_map[example.id_data] = result
-
+            if result.positive:
+                sum_pos_prob += result.mParam
+                sum_pos_parsed += result.mParsed
+            else:
+                sum_neg_prob += result.mParam
+                sum_neg_parsed += result.mParsed
+        # print("TP: {}, FP: {}, FN: {}, TN: {}, mean positive probability = {}, mean negative probability ()".
+        #       format(self.grammar.truePositive, self.grammar.falsePositive, self.grammar.falseNegative, self.grammar.trueNegative,
+        #              0 if sum_pos_parsed == 0 else (sum_pos_prob-sum_neg_prob)/sum_pos_parsed),
+        #       )
         if isinstance(self.grammar, sGCSGrammar):
             self.grammar.positives_sample_amount = count_positives
             self.grammar.negative_sample_amount = count_negatives
 
-        self.refresh_rules_params(benchmark)
-
     def evaluate_grammar_and_save_results_to_iteration(self, iteration: Iteration):
-        iteration.results = self.benchmark_run()
-        iteration.result_map = self.result_map
+        iteration.results = self.benchmark_run(test=False)
+        # iteration.result_map = self.result_map
         self.__logger.info("Filling report rules")
         iteration.fill_report_rules()
 
     def refresh_rules_params(self, benchmark=False):
         if not benchmark:
             self.grammar.adjust_parameters()
-        self.grammar.rulesContainer.count_fitness()
+        if self.settings.get_value('general', 'fitness_enabled') == 'True':
+            self.grammar.rulesContainer.count_fitness()
+        else:
+            self.grammar.rulesContainer.count_fitness(self.grammar.truePositive + self.grammar.falseNegative,
+                                                      self.grammar.trueNegative + self.grammar.falsePositive)
 
     def parse_single_example(self, example: TestData):
         self.learning_mode_off()
@@ -369,6 +417,7 @@ class GCSBase:
 
     def benchmark_run(self, test=False):
         self.__logger.info("Running benchmark")
+        # print("Running benchmark")
         self.learning_mode_off()
         self.grammar_induction(Iteration(), benchmark=True, test=test)
         last_fitness: float = self.last_results.fitness if self.last_results is not None else 0.0

@@ -42,10 +42,10 @@ class ScykController:
             grammar.init_grammar(test_data)
             self.init_crowding_and_covering(grammar)
 
-            print('Starting sequential scyk testing')
+            # print('Starting sequential scyk testing')
             for i in range(iterations):
                 self.benchmark_sequential_scyk(grammar, test_data, learning_on, seq_times)
-            print('Finished sequential scyk testing')
+            # print('Finished sequential scyk testing')
 
             # print('Starting parallel scyk testing')
             # for i in range(iterations):
@@ -57,11 +57,11 @@ class ScykController:
             #     self.benchmark_parallel_scyk_ladder(grammar, test_data, self.iteration, learning_on, par_ladder_times)
             # print('Finished parallel scyk ladder testing')
 
-            print('Starting parallel scyk ordered jobs testing')
+            # print('Starting parallel scyk ordered jobs testing')
             for i in range(iterations):
                 self.benchmark_parallel_scyk_ordered_jobs(grammar, test_data, self.iteration, learning_on,
                                                           par_ordered_jobs_times)
-            print('Finished parallel scyk scyk ordered jobs testing')
+            # print('Finished parallel scyk scyk ordered jobs testing')
 
             seq_dict = self.benchmark_sequential_scyk_with_dict_result(grammar, test_data, learning_on, iterations)
 
@@ -76,12 +76,12 @@ class ScykController:
             #                                                                        iterations)
             # print('Finished parallel scyk ladder dictionary generation')
 
-            print('Starting parallel scyk ordered jobs dictionary generation')
+            # print('Starting parallel scyk ordered jobs dictionary generation')
             par_ordered_jobs_dict = self.benchmark_parallel_ordered_scyk_with_dict_result(grammar, test_data,
                                                                                           self.iteration,
                                                                                           learning_on,
                                                                                           iterations)
-            print('Finished parallel scyk ordered jobs dictionary generation')
+            # print('Finished parallel scyk ordered jobs dictionary generation')
 
             with open("results_seq_lon", "w") as f:
                 f.write(str(seq_times))

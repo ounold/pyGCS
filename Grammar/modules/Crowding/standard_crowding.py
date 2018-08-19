@@ -21,23 +21,25 @@ class StandardCrowding(Crowding):
             self.aaa_rules_handling_type = AaaRulesHandlingType[rules_handling_type]
 
     def add_rule(self, grammar: Grammar, new_rule: Rule) -> bool:
+        if (self.aaa_rules_handling_type is not AaaRulesHandlingType.NO_AAA_RULES
+            or not new_rule.is_non_terminal_to_terminal_terminal_rule()) and \
+                        new_rule not in grammar.rulesContainer.forbidden_rules:
+            rules = self.initialize_rules(new_rule, grammar)
 
-        rules = self.initialize_rules(new_rule, grammar)
+            if self.rule_already_exist(new_rule, rules):
+                self.logger.info("Rule {} exists in grammar".format(new_rule))
+                return False
 
-        if self.rule_already_exist(new_rule, rules):
-            self.logger.info("Rule {} exists in grammar".format(new_rule))
-            return False
+            if self.grammar_has_room_for_rule(rules):
+                grammar.add_rule(new_rule)
+                self.logger.info("Grammar had room. Rule {} was added".format(new_rule))
+                return True
 
-        if self.grammar_has_room_for_rule(rules):
-            grammar.add_rule(new_rule)
-            self.logger.info("Grammar had room. Rule {} was added".format(new_rule))
+            rule_to_remove = self.find_rule_to_remove(new_rule, rules)
+
+            self.remove_from(grammar, rule_to_remove)
+            self.add_to(grammar, new_rule)
             return True
-
-        rule_to_remove = self.find_rule_to_remove(new_rule, rules)
-
-        self.remove_from(grammar, rule_to_remove)
-        self.add_to(grammar, new_rule)
-        return True
 
     def add_rules(self, grammar: Grammar, new_rules: List[Rule]) -> None:
         rules = set(grammar.get_non_terminal_rules())
@@ -58,7 +60,7 @@ class StandardCrowding(Crowding):
         return
 
     def count_rules_to_remove(self, new_rules, rules) -> int:
-        return rules.__len__() + new_rules.__len__() - self.non_terminal_productions_number
+        return rules.__len__() + new_rules.__len__() - int(self.non_terminal_productions_number)
 
     def grammar_has_room_for_rules(self, new_rules: List[Rule], rules: Set[Rule]) -> bool:
         return rules.__len__() + new_rules.__len__() <= self.non_terminal_productions_number
@@ -79,16 +81,26 @@ class StandardCrowding(Crowding):
 
     def find_the_worst_rules(self, rules: List[Rule]) -> List[Rule]:
         the_worst_rules = []
+        filtered_rules = self.filter_rules(rules)
         for i in range(0, self.crowding_factor):
-            subset = self.create_random_subset(rules, size=self.crowding_population)
+            subset = self.create_random_subset(filtered_rules, size=self.crowding_population)
             the_worst_rule = self.find_the_worst(subset)
             the_worst_rules.append(the_worst_rule)
         return the_worst_rules
+
+    def filter_rules(self, rules: List[Rule])->List[Rule]:
+        filtered_rules = list(filter(lambda rule: rule.age > 0, rules))
+        if len(filtered_rules) == 0:
+            return rules
+        else:
+            return filtered_rules
 
     def find_the_worst(self, rules: List[Rule]) -> Rule:
         return min(rules, key=lambda rule: rule.fitness)
 
     def create_random_subset(self, rules: List[Rule], size: int) -> List[Rule]:
+        if len(rules) <= size:
+            return rules
         return random.sample(rules, size)
 
     def initialize_rules(self, new_rule: Rule, grammar: Grammar) -> Set[Rule]:
@@ -104,7 +116,7 @@ class StandardCrowding(Crowding):
                and grammar.count_Aaa_rules() <= self.non_terminal_productions_number
 
     def filter_non_terminal_to_terminal_terminal_rule(self, rules: List[Rule]) -> Set[Rule]:
-        return {rule for rule in rules if not rule.is_non_terminal_to_terminal_terminal_rule()}
+        return [rule for rule in rules if not rule.is_non_terminal_to_terminal_terminal_rule()]
 
     def find_the_most_similar_from(self, new_rules: List[Rule], among: List[Rule]) -> Rule:
         return max(among, key=lambda awesome_rule: self.count_group_similarity(awesome_rule, new_rules))

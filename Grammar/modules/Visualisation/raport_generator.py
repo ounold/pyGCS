@@ -1,82 +1,86 @@
 import json
 import os
+import sys
 import networkx
 import random
+from itertools import zip_longest
 
 
 class ReportGenerator:
-    def __init__(self, results, settings):
+    def __init__(self, settings):
         self._path = "{}/../../../Charts/data/".format(os.path.dirname(os.path.abspath(__file__)))
         self._settings = settings
-        self.results = results
+        self.iterations = 1
+        self.collection_of_iterations = []
+        self.collection_of_final_rules = []
+        self.current_iteration = 0
+        self.results = None
         self.rules = []
-        self._create_sensitivity_json(self.results.iterations)
-        self._create_specificity_json(self.results.iterations)
-        self._create_fitness_json(self.results.iterations)
-        self._create_precision_json(self.results.iterations)
-        self._create_json_for_all_parameters(self.results.iterations)
-        self._create_grammar_size_json(self.results.iterations)
-        self._create_rules_json(self.results.iterations)
-        self._create_rules_description(self.results.iterations)
-        self.get_rules_parsing_negative_sentence(self.results.iterations)
-        self.graph = networkx.Graph()
         self.tree = None
+        self.final_rules = []
 
-    def _create_json_for_all_parameters(self, iterations):
-        iteration_list = []
-        sensitivity_data = []
-        specificity_data = []
-        fitness_data = []
-        precision_data = []
-        hover_text = []
-        data = []
-        for index, iteration in enumerate(iterations):
-            iteration_list.append(index+1)
-            sensitivity = iteration.results.sensitivity
-            specificity = iteration.results.specificity
-            fitness = iteration.results.fitness
-            precision = iteration.results.precision
-            sensitivity_data.append(sensitivity)
-            specificity_data.append(specificity)
-            fitness_data.append(fitness)
-            precision_data.append(precision)
-            hover_text.append("{}|{:.2f}|{:.2f}|{:.2f}|{:.2f}".format(index+1, sensitivity, specificity,
-                                                                      fitness, precision))
-        data.append({"x": iteration_list, "y": sensitivity_data, "text": hover_text, "type": "scatter",
-                     "hoverinfo": "none", "hovermode": "closest", "name": "Sensitivity"})
-        data.append({"x": iteration_list, "y": specificity_data, "text": hover_text, "type": "scatter",
-                     "hoverinfo": "none", "hovermode": "closest", "name": "Specificity"})
-        data.append({"x": iteration_list, "y": fitness_data, "text": hover_text, "type": "scatter",
-                     "hoverinfo": "none", "hovermode": "closest", "name": "Fitness"})
-        data.append({"x": iteration_list, "y": precision_data, "text": hover_text, "type": "scatter",
-                     "hoverinfo": "none", "hovermode": "closest", "name": "Precision"})
-        result = {"data": data,
-                  "layout": {"autosize": True,
-                             "xaxis": {"title": "Iterations"},
-                             "yaxis": {"title": "Data"}}}
-        with open("{}{}".format(self._path, "full_params.json"), "w") as f:
-            f.write(json.dumps(result))
+    def create_graphs(self):
+        self._create_sensitivity_json(self.collection_of_iterations)
+        self._create_specificity_json(self.collection_of_iterations)
+        self._create_fitness_json(self.collection_of_iterations)
+        self._create_precision_json(self.collection_of_iterations)
+        self._create_grammar_size_json(self.collection_of_iterations)
+        self._create_rules_json(self.collection_of_iterations)
+        self._create_rules_description(self.collection_of_iterations)
+        self.get_rules_parsing_negative_sentence(self.collection_of_iterations)
+        self.graph = networkx.Graph()
+        self.generate_final_tree(self.collection_of_final_rules[-1])
+        self.generate_final_parse_tree(self.collection_of_final_rules[-1])
+
+    def avg(self, x):
+        x = [i for i in x if i is not None]
+        return sum(x, 0.0) / len(x)
+
+    def get_size(self, obj, seen=None):
+        size = sys.getsizeof(obj)
+        if seen is None:
+            seen = set()
+        obj_id = id(obj)
+        if obj_id in seen:
+            return 0
+        seen.add(obj_id)
+        if isinstance(obj, dict):
+            size += sum([self.get_size(v, seen) for v in obj.values()])
+            size += sum([self.get_size(k, seen) for k in obj.keys()])
+        elif hasattr(obj, '__dict__'):
+            size += self.get_size(obj.__dict__, seen)
+        elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+            size += sum([self.get_size(i, seen) for i in obj])
+        return size
 
     def _create_sensitivity_json(self, iterations):
-        iteration_list = []
-        sensitivity_data = []
-        hover_text = []
+        iteration_list_all = []
+        sensitivity_data_all = []
         trace_name = self._settings.get_value("general", "trace_name")
-        for index, iteration in enumerate(iterations):
-            iteration_list.append(index+1)
-            sensitivity_data.append(iteration.results.sensitivity)
-            hover_text.append("{}|{:.2f}".format(index+1, iteration.results.sensitivity))
+        hover_text_final = []
+        for collection in iterations:
+            iteration_list = []
+            sensitivity_data = []
+            for index, iteration in enumerate(collection.iterations):
+                iteration_list.append(index+1)
+                sensitivity_data.append(iteration.results.sensitivity)
+            iteration_list_all.append(iteration_list)
+            sensitivity_data_all.append(sensitivity_data)
+        iteration_list_final = list(map(self.avg, zip_longest(*iteration_list_all)))
+        sensitivity_data_final = list(map(self.avg, zip_longest(*sensitivity_data_all)))
+        for index, sensitivity_value in enumerate(sensitivity_data_final):
+            hover_text_final.append("{}|{:.2f}".format(index + 1, sensitivity_value))
         if os.path.exists("{}{}".format(self._path, "sensitivity.json")):
             with open("{}{}".format(self._path, "sensitivity.json"), "r") as f:
                 parsed_file = json.load(f)
-            parsed_file["data"].append({"x": iteration_list, "y": sensitivity_data, "text": hover_text,
-                                        "type": "scatter", "hoverinfo": "none", "hovermode": "closest",
-                                        "name": trace_name})
+            parsed_file["data"].append({"x": iteration_list_final, "y": sensitivity_data_final,
+                                        "text": hover_text_final, "type": "scatter", "hoverinfo": "none",
+                                        "hovermode": "closest", "name": trace_name})
             with open("{}{}".format(self._path, "sensitivity.json"), "w") as f:
                 f.write(json.dumps(parsed_file))
         else:
-            result = {"data": [{"x": iteration_list, "y": sensitivity_data, "text": hover_text, "type": "scatter",
-                                "hoverinfo": "none", "hovermode": "closest", "name": trace_name}],
+            result = {"data": [{"x": iteration_list_final, "y": sensitivity_data_final, "text": hover_text_final,
+                                "type": "scatter", "hoverinfo": "none", "hovermode": "closest", "name": trace_name}],
                       "layout": {"title": "Sensitivity", "autosize": True,
                                  "xaxis": {"title": "Iterations"},
                                  "yaxis": {"title": "Sensitivity"}}}
@@ -84,25 +88,33 @@ class ReportGenerator:
                 f.write(json.dumps(result))
 
     def _create_specificity_json(self, iterations):
-        iteration_list = []
-        specificity_data = []
-        hover_text = []
+        iteration_list_all = []
+        specificity_data_all = []
         trace_name = self._settings.get_value("general", "trace_name")
-        for index, iteration in enumerate(iterations):
-            iteration_list.append(index+1)
-            specificity_data.append(iteration.results.specificity)
-            hover_text.append("{}|{:.2f}".format(index+1, iteration.results.specificity))
+        hover_text_final = []
+        for collection in iterations:
+            iteration_list = []
+            specificity_data = []
+            for index, iteration in enumerate(collection.iterations):
+                iteration_list.append(index + 1)
+                specificity_data.append(iteration.results.specificity)
+            iteration_list_all.append(iteration_list)
+            specificity_data_all.append(specificity_data)
+        iteration_list_final = list(map(self.avg, zip_longest(*iteration_list_all)))
+        specificity_data_final = list(map(self.avg, zip_longest(*specificity_data_all)))
+        for index, specificity_value in enumerate(specificity_data_final):
+            hover_text_final.append("{}|{:.2f}".format(index + 1, specificity_value))
         if os.path.exists("{}{}".format(self._path, "specificity.json")):
             with open("{}{}".format(self._path, "specificity.json"), "r") as f:
                 parsed_file = json.load(f)
-            parsed_file["data"].append({"x": iteration_list, "y": specificity_data, "text": hover_text,
-                                        "type": "scatter", "hoverinfo": "none", "hovermode": "closest",
-                                        "name": trace_name})
+            parsed_file["data"].append({"x": iteration_list_final, "y": specificity_data_final,
+                                        "text": hover_text_final, "type": "scatter", "hoverinfo": "none",
+                                        "hovermode": "closest", "name": trace_name})
             with open("{}{}".format(self._path, "specificity.json"), "w") as f:
                 f.write(json.dumps(parsed_file))
         else:
-            result = {"data": [{"x": iteration_list, "y": specificity_data, "text": hover_text, "type": "scatter",
-                                "hoverinfo": "none", "hovermode": "closest", "name": trace_name}],
+            result = {"data": [{"x": iteration_list_final, "y": specificity_data_final, "text": hover_text_final,
+                                "type": "scatter", "hoverinfo": "none", "hovermode": "closest", "name": trace_name}],
                       "layout": {"title": "Specificity", "autosize": True,
                                  "xaxis": {"title": "Iterations"},
                                  "yaxis": {"title": "Specificity"}}}
@@ -110,25 +122,33 @@ class ReportGenerator:
                 f.write(json.dumps(result))
 
     def _create_fitness_json(self, iterations):
-        iteration_list = []
-        fitness_data = []
-        hover_text = []
+        iteration_list_all = []
+        fitness_data_all = []
         trace_name = self._settings.get_value("general", "trace_name")
-        for index, iteration in enumerate(iterations):
-            iteration_list.append(index+1)
-            fitness_data.append(iteration.results.fitness)
-            hover_text.append("{}|{:.2f}".format(index+1, iteration.results.fitness))
+        hover_text_final = []
+        for collection in iterations:
+            iteration_list = []
+            fitness_data = []
+            for index, iteration in enumerate(collection.iterations):
+                iteration_list.append(index + 1)
+                fitness_data.append(iteration.results.fitness)
+            iteration_list_all.append(iteration_list)
+            fitness_data_all.append(fitness_data)
+        iteration_list_final = list(map(self.avg, zip_longest(*iteration_list_all)))
+        fitness_data_final = list(map(self.avg, zip_longest(*fitness_data_all)))
+        for index, fitness_value in enumerate(fitness_data_final):
+            hover_text_final.append("{}|{:.2f}".format(index + 1, fitness_value))
         if os.path.exists("{}{}".format(self._path, "fitness.json")):
             with open("{}{}".format(self._path, "fitness.json"), "r") as f:
                 parsed_file = json.load(f)
-            parsed_file["data"].append({"x": iteration_list, "y": fitness_data, "text": hover_text,
-                                        "type": "scatter", "hoverinfo": "none", "hovermode": "closest",
-                                        "name": trace_name})
+            parsed_file["data"].append({"x": iteration_list_final, "y": fitness_data_final,
+                                        "text": hover_text_final, "type": "scatter", "hoverinfo": "none",
+                                        "hovermode": "closest", "name": trace_name})
             with open("{}{}".format(self._path, "fitness.json"), "w") as f:
                 f.write(json.dumps(parsed_file))
         else:
-            result = {"data": [{"x": iteration_list, "y": fitness_data, "text": hover_text, "type": "scatter",
-                                "hoverinfo": "none", "hovermode": "closest", "name": trace_name}],
+            result = {"data": [{"x": iteration_list_final, "y": fitness_data_final, "text": hover_text_final,
+                                "type": "scatter", "hoverinfo": "none", "hovermode": "closest", "name": trace_name}],
                       "layout": {"title": "Fitness", "autosize": True,
                                  "xaxis": {"title": "Iterations"},
                                  "yaxis": {"title": "Fitness"}}}
@@ -136,25 +156,33 @@ class ReportGenerator:
                 f.write(json.dumps(result))
 
     def _create_precision_json(self, iterations):
-        iteration_list = []
-        precision_data = []
-        hover_text = []
+        iteration_list_all = []
+        precision_data_all = []
         trace_name = self._settings.get_value("general", "trace_name")
-        for index, iteration in enumerate(iterations):
-            iteration_list.append(index+1)
-            precision_data.append(iteration.results.precision)
-            hover_text.append("{}|{:.2f}".format(index+1, iteration.results.precision))
+        hover_text_final = []
+        for collection in iterations:
+            iteration_list = []
+            precision_data = []
+            for index, iteration in enumerate(collection.iterations):
+                iteration_list.append(index + 1)
+                precision_data.append(iteration.results.precision)
+            iteration_list_all.append(iteration_list)
+            precision_data_all.append(precision_data)
+        iteration_list_final = list(map(self.avg, zip_longest(*iteration_list_all)))
+        precision_data_final = list(map(self.avg, zip_longest(*precision_data_all)))
+        for index, precision_value in enumerate(precision_data_final):
+            hover_text_final.append("{}|{:.2f}".format(index + 1, precision_value))
         if os.path.exists("{}{}".format(self._path, "precision.json")):
             with open("{}{}".format(self._path, "precision.json"), "r") as f:
                 parsed_file = json.load(f)
-            parsed_file["data"].append({"x": iteration_list, "y": precision_data, "text": hover_text,
-                                        "type": "scatter", "hoverinfo": "none", "hovermode": "closest",
-                                        "name": trace_name})
+            parsed_file["data"].append({"x": iteration_list_final, "y": precision_data_final,
+                                        "text": hover_text_final, "type": "scatter", "hoverinfo": "none",
+                                        "hovermode": "closest", "name": trace_name})
             with open("{}{}".format(self._path, "precision.json"), "w") as f:
                 f.write(json.dumps(parsed_file))
         else:
-            result = {"data": [{"x": iteration_list, "y": precision_data, "text": hover_text, "type": "scatter",
-                                "hoverinfo": "none", "hovermode": "closest", "name": trace_name}],
+            result = {"data": [{"x": iteration_list_final, "y": precision_data_final, "text": hover_text_final,
+                                "type": "scatter", "hoverinfo": "none", "hovermode": "closest", "name": trace_name}],
                       "layout": {"title": "Precision", "autosize": True,
                                  "xaxis": {"title": "Iterations"},
                                  "yaxis": {"title": "Precision"}}}
@@ -162,14 +190,23 @@ class ReportGenerator:
                 f.write(json.dumps(result))
 
     def _create_grammar_size_json(self, iterations):
-        iteration_list = []
-        grammar_size = []
-        hover_text = []
-        for index, iteration in enumerate(iterations):
-            iteration_list.append(index+1)
-            grammar_size.append(len(iteration.rules))
-            hover_text.append("{}|{:.2f}".format(index+1, len(iteration.rules)))
-        result = {"data": [{"x": iteration_list, "y": grammar_size, "text": hover_text, "type": "scatter",
+        iteration_list_all = []
+        grammar_size_all = []
+        hover_text_final = []
+        for collection in iterations:
+            iteration_list = []
+            grammar_size_data = []
+            for index, iteration in enumerate(collection.iterations):
+                iteration_list.append(index + 1)
+                grammar_size_data.append(len(iteration.rules))
+            iteration_list_all.append(iteration_list)
+            grammar_size_all.append(grammar_size_data)
+        iteration_list_final = list(map(self.avg, zip_longest(*iteration_list_all)))
+        grammar_size_final = list(map(self.avg, zip_longest(*grammar_size_all)))
+        for index, grammar_size in enumerate(grammar_size_final):
+            hover_text_final.append("{}|{:.2f}".format(index + 1, grammar_size))
+        result = {"data": [{"x": iteration_list_final, "y": grammar_size_final,
+                            "text": hover_text_final, "type": "scatter",
                             "hoverinfo": "none", "hovermode": "closest"}],
                   "layout": {"title": "Grammar Size", "autosize": True,
                              "xaxis": {"title": "Iterations"},
@@ -184,7 +221,7 @@ class ReportGenerator:
             text_objects = []
             trace_name = ""
             color = ""
-            for iteration in iterations:
+            for iteration in iterations[-1].iterations:
                 added_rules = []
                 removed_rules = []
                 terminal_rules = []
@@ -244,7 +281,7 @@ class ReportGenerator:
                     trace_name = "Non terminal rules"
                     color = "#1f76b4"
             trace_objects.append({
-                "x": [x + 1 for x, _ in enumerate(self.results.iterations)],
+                "x": [x + 1 for x, _ in enumerate(iterations[-1].iterations)],
                 "y": y_objects,
                 "text": text_objects,
                 "name": trace_name,
@@ -267,7 +304,7 @@ class ReportGenerator:
             text_objects = []
             trace_name = ""
             color = ""
-            for iteration in iterations:
+            for iteration in iterations[-1].iterations:
                 initialization_rules = []
                 covering_rules = []
                 heuristic_rules = []
@@ -312,7 +349,7 @@ class ReportGenerator:
                     trace_name = "Unknown rules"
                     color = "#d62829"
             trace_objects.append({
-                "x": [x + 1 for x, _ in enumerate(self.results.iterations)],
+                "x": [x + 1 for x, _ in enumerate(iterations[-1].iterations)],
                 "y": y_objects,
                 "text": text_objects,
                 "name": trace_name,
@@ -417,11 +454,11 @@ class ReportGenerator:
                 if symbol == edge["data"]["source"]:
                     count += 1
             average_usage += count
-            print(average_usage)
+            #print(average_usage)
             nodes.append({"data": {"id": symbol, "name": symbol, "faveColor": self.get_color(symbol),
                                    "score": count * 10}})
         average = average_usage/(len(rules_symbols) - terminal_rules)
-        print(average)
+        #print(average)
         for node in nodes:
             if node["data"]["score"] / 10 > average:
                 generated_color = random.choice(color_list)
@@ -442,24 +479,25 @@ class ReportGenerator:
         rules_objects = []
         invalid_rules_objects = []
         text_object = []
-        for index, iteration in enumerate(iterations):
+        for index, iteration in enumerate(iterations[-1].iterations):
             rules_names = []
             for data in iteration.sentence_rules_parsing_data:
                 for rules_list in data[2]:
-                    for rule_cell in rules_list:
+                    for rule_cell in [rule_cell for rule_cell in rules_list if rule_cell is not None]:
                         for rule in rule_cell:
-                            rule_name = "{}->{}{}".format(str(rule.rule.left),
-                                                          (rule.rule.right1 or ""),
-                                                          (rule.rule.right2 or ""))
-                            if rule_name not in rules_names:
-                                if data[1]:
-                                    rules_names.append(rule_name)
+                            if rule is not None:
+                                rule_name = "{}->{}{}".format(str(rule.rule.left),
+                                                              (rule.rule.right1 or ""),
+                                                              (rule.rule.right2 or ""))
+                                if rule_name not in rules_names:
+                                    if data[1]:
+                                        rules_names.append(rule_name)
             rules_objects.append(len(iteration.rules))
             invalid_rules_objects.append(len(rules_names))
             percent = (len(rules_names)/len(iteration.rules))*100
             text_object.append("{};{};{};{:.2f}".format(index + 1, len(iteration.rules), len(rules_names), percent))
         trace_objects.append({
-            "x": [x + 1 for x, _ in enumerate(iterations)],
+            "x": [x + 1 for x, _ in enumerate(iterations[-1].iterations)],
             "y": rules_objects,
             "text": text_object,
             "name": "Number of rules",
@@ -472,7 +510,7 @@ class ReportGenerator:
             }
         })
         trace_objects.append({
-            "x": [x + 1 for x, _ in enumerate(iterations)],
+            "x": [x + 1 for x, _ in enumerate(iterations[-1].iterations)],
             "y": invalid_rules_objects,
             "name": "Rules parsing negative sentences",
             "type": "scatter",
@@ -492,7 +530,10 @@ class ReportGenerator:
             self.graph.add_edge(str(rule.left), str(rule.right1))
             if rule.right2 is not None:
                 self.graph.add_edge(str(rule.left), str(rule.right2))
-        self.tree = networkx.bfs_tree(self.graph, "$")
+        try:
+            self.tree = networkx.bfs_tree(self.graph, "$")
+        except:
+            pass
 
     def get_nodes_and_edges(self):
         edges = []

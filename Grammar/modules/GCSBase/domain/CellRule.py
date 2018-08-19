@@ -12,6 +12,8 @@ class CellRule:
         self.called_number = 0
         self.tmp_val = 0.0
         self.parsed = False
+        self.index = None
+        self.proceeded = False
 
     def __eq__(self, other):
         if type(self) is type(other):

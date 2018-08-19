@@ -23,8 +23,9 @@ class RulesContainer:
         self.fitness_defaults: FitnessDefaults = FitnessDefaults(self.settings)
 
     def add_rule(self, rule: Rule):
-        if self.aaa_rules_handling_type is not AaaRulesHandlingType.NO_AAA_RULES \
-                or not rule.is_non_terminal_to_terminal_terminal_rule():
+        if (self.aaa_rules_handling_type is not AaaRulesHandlingType.NO_AAA_RULES
+                or not rule.is_non_terminal_to_terminal_terminal_rule()) and \
+                        rule not in self.forbidden_rules:
             self.rules.add(rule)
             if rule.is_terminal(self.aaa_rules_handling_type):
                 self.terminal_rules.add(rule)
@@ -38,18 +39,18 @@ class RulesContainer:
                 try:
                     self.terminal_rules.remove(rule)
                     self.__logger.debug('Removed rule {} from terminal rules'.format(rule))
-                except ValueError:
+                except (ValueError, KeyError):
                     self.__logger.debug('Rule {} not found in terminal rules collection during removal'.format(rule))
             else:
                 try:
                     self.non_terminal_rules.remove(rule)
                     self.__logger.debug('Removed rule {} from non terminal rules'.format(rule))
-                except ValueError:
+                except (ValueError, KeyError):
                     self.__logger.debug('Rule {} not found in non terminal rules collection during removal'.format(rule))
             try:
                 self.rules.remove(rule)
                 self.__logger.debug('Removed rule {} from all rules'.format(rule))
-            except ValueError:
+            except (ValueError, KeyError):
                 self.__logger.debug('Rule {} not found in non terminal rules collection during removal'.format(rule))
         else:
             pass
@@ -104,7 +105,7 @@ class RulesContainer:
     def sort_rules_used_in_invalid_parsing(self, rules_used_in_invalid_parsing):
         return sorted(rules_used_in_invalid_parsing, key=Rule.getKey)
 
-    def count_fitness(self):
+    def count_fitness(self, *args):
         ff_max = sys.float_info.min
         ff_min = sys.float_info.max
         for rule in self.rules:
@@ -114,7 +115,10 @@ class RulesContainer:
             if rule_ff_value < ff_min:
                 ff_min = rule_ff_value
         for rule in self.rules:
-            RulesService.count_fitness(ff_max, ff_min, self.fitness_defaults, rule)
+            if not args:
+                RulesService.count_fitness(ff_max, ff_min, self.fitness_defaults, rule)
+            else:
+                RulesService.count_fitness2(rule, args[0], args[1])
 
     def count_aaa_rules(self):
         counter = 0

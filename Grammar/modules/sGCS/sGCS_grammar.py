@@ -1,5 +1,6 @@
 import logging
 import random
+import copy
 from modules.GCSBase.grammar.grammar import Grammar
 from modules.Stochastic.Stochastic import Stochastic
 from modules.GCSBase.domain.symbol import Symbol
@@ -18,6 +19,11 @@ class sGCSGrammar(Grammar):
         self.__positives_sample_amount = 0
         self.__negative_sample_amount = 0
         self.__stochastic = Stochastic()
+        self.full_rules_table = dict()
+        self.full_probability_array = dict()
+        self.positives = dict()
+        self.s_examples = dict()
+        self.examples_probs = list()
         if settings is not None:
             self.__new_ones_only = self.__settings.get_value("sgcs", "new_ones_only") == "True"
             self.__estimation_method = self.__settings.get_value("sgcs", "probability_estimation_method")
@@ -48,6 +54,14 @@ class sGCSGrammar(Grammar):
     def estimation_type(self):
         return self.__estimation_type
 
+    @property
+    def stochastic(self):
+        return self.__stochastic
+
+    @stochastic.setter
+    def stochastic(self, x):
+        self.__stochastic = x
+
     @positives_sample_amount.setter
     def positives_sample_amount(self, x):
         self.__positives_sample_amount = x
@@ -73,6 +87,7 @@ class sGCSGrammar(Grammar):
         self.__estimation_type = x
 
     def adjust_parameters(self):
+        #self.__remove_unused_rules()
         self.__stochastic.estimate_prob(self)
 
     def normalize_grammar(self):
@@ -95,6 +110,11 @@ class sGCSGrammar(Grammar):
     @staticmethod
     def get_rule_from_string(rule_string, symbols: List[Symbol]):
         return sRule(rule_string, symbols)
+
+    def reset_grammar(self):
+        super().reset_grammar()
+        self.examples_probs = list()
+
 
 
 

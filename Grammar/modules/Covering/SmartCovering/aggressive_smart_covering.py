@@ -45,7 +45,7 @@ class AggressiveSmartCovering(Covering):
         if len(symbols_statistics) == 0:
             return RandomUtils.get_random_nonterminal_symbol_from(grammar)
 
-        the_best_symbols_statistics = self.find_the_best_symbols(symbols_statistics, number_of_symbols=5)
+        the_best_symbols_statistics = self.find_the_best_symbols(symbols_statistics, number_of_symbols=8)
         return self.roulette_selection.select(the_best_symbols_statistics)
 
     def find_the_best_symbols(self, statistics: Dict[Symbol, int], number_of_symbols: int) -> List[Tuple[Symbol, int]]:

@@ -15,9 +15,11 @@ class RuleOrigin(Enum):
         return self.value[:1]
 
 class Rule:
-    def __init__(self, symbols: List[Symbol] = None):
+    def __init__(self, symbols: List[Symbol] = None, *args):
         self.usages_in_invalid_parsing = 0
         self.usages_in_proper_parsing = 0
+        self.usage_in_distinct_proper = 0
+        self.usage_in_distinct_invalid = 0
         self.right2 = None
         self.right1 = None
         self.fitness = 0
@@ -86,6 +88,8 @@ class Rule:
     def reset_usages_and_points(self):
         self.usages_in_proper_parsing = 0
         self.usages_in_invalid_parsing = 0
+        self.usage_in_distinct_proper = 0
+        self.usage_in_distinct_invalid = 0
         self.debt = 0.0
         self.profit = 0.0
 
@@ -94,7 +98,10 @@ class Rule:
 
     def __eq__(self, other):
         if type(self) is type(other):
-            return self.left == other.left and self.right1 == other.right1 and self.right2 == other.right2
+            return self.left.index == other.left.index and \
+                   self.right1.index == other.right1.index and \
+                   self.right2.index == other.right2.index if self.right2 is not None and \
+                                                              other.right2 is not None else self.right2 == other.right2
         return False
 
     def __hash__(self) -> int:
@@ -109,5 +116,8 @@ class Rule:
     def __cmp__(self, other):
         if hasattr(other, 'fitness'):
             return self.fitness.__cmp__(other.fitness)
+
+    def short(self):
+        return "{}->{}{}".format(self.left, self.right1, self.right2 if self.right2 is not None else "")
 
 

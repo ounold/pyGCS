@@ -41,6 +41,7 @@ class Test_GeneticSelection(TestCase):
         self.rules = {self.rule_1, self.rule_2, self.rule_3, self.rule_4, self.rule_5}
         self.rules_list = [self.rule_1, self.rule_2, self.rule_3, self.rule_4, self.rule_5]
 
+
     def test_prepare_selection_map(self):
         result = self.genetic_selection.prepare_selection_map()
         expected = {GeneticSelectionType.RANDOM: self.genetic_selection.random_select,
@@ -49,7 +50,7 @@ class Test_GeneticSelection(TestCase):
         self.assertEqual(expected, result)
 
     def test_select_rule(self):
-        grammar = Grammar()
+        grammar = MagicMock()
         grammar.get_non_terminal_rules = MagicMock(return_value=self.rules)
         result = self.genetic_selection.select_rule(grammar, GeneticSelectionType.TOURNAMENT)
         self.assertIsNotNone(result)

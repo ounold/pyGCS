@@ -38,24 +38,36 @@ class CommandController:
                                                          layout=widgets.Layout(width='100%', height='100%'),
                                                          style={'description_width': 'initial'})
                     display(loader_widget)
-                    #random.seed(23)
                     self.__gcs = sGCS(self.__settings)
                     self.__gcs.train_data = abbading_format_loader.input_data
                     self.__gcs.test_data = abbading_format_loader_test.input_data
+                    self.__gcs.grammar.stochastic.train_data = abbading_format_loader.input_data
                     self.__gcs.reset_grammar()
                     self.run_standard_test()
-                    result = self.__gcs.process(True, loader_widget)
-                    result.learning_set_name = train_data
-                    self.__result_list.append(str(result))
-                    #self.__result_generator = ReportGenerator(result, self.__settings)
-                    final_rules = self.__gcs.grammar.get_rules()
+                    visualization_enable = self.__settings.get_value("general", "visualization_enable")
+                    sim_results, final_rules = self.__gcs.process(visualization_enable, loader_widget)
+                    sim_results.learning_set_name = train_data
+                    self.__result_list.append(str(sim_results))
+                    TP = self.__gcs.grammar.truePositive
+                    FP = self.__gcs.grammar.falsePositive
+                    FN = self.__gcs.grammar.falseNegative
+                    TN = self.__gcs.grammar.trueNegative
+                    Sens = TP/(TP+FN)
+                    Spec = TN/(TN+FP)
+                    # print("TP = {}". format(TP))
+                    # print("FP = {}". format(FP))
+                    # print("FN = {}". format(FN))
+                    # print("TN = {}". format(TN))
+                    # print("Sensitivity = {}". format(Sens))
+                    # print("Specificity = {}". format(Spec))
+
                     # for rule in final_rules:
                     #     print(str(rule) + " usages = " + str(rule.usages_in_proper_parsing))
                 else:
                     self.__logger.error("Algorithm mode unknown")
             except:
                 self.__logger.exception("Parameter not found")
-        # print("Done")
+        return sim_results, final_rules
 
     def run_standard_test(self):
         pass

@@ -42,3 +42,17 @@ class RulesService:
         fitness = (fitness_defaults.weight_classic_fitness * f_c + fitness_defaults.weight_fertility_fitness * f_f) \
                   / (fitness_defaults.weight_classic_fitness + fitness_defaults.weight_fertility_fitness)
         rule.fitness = fitness
+
+    @staticmethod
+    def count_fitness2(r, n_positive, n_negative):
+        positive_cover = r.usage_in_distinct_proper / n_positive
+        negative_cover = r.usage_in_distinct_invalid / n_negative
+        pos_acc = 0 if r.usage_in_distinct_proper == 0 else r.usage_in_distinct_proper_parsed / r.usage_in_distinct_proper
+        neg_acc = 0 if r.usage_in_distinct_invalid == 0 else r.usage_in_distinct_invalid_parsed / r.usage_in_distinct_invalid
+        pos_gain = positive_cover * pos_acc
+        neg_gain = negative_cover * neg_acc
+        gain = 0 if (pos_gain + neg_gain) == 0 else pos_gain / (pos_gain + neg_gain)
+        #r.fitness = r.fitness * (gain + 1)/10
+        r.fitness = gain
+
+

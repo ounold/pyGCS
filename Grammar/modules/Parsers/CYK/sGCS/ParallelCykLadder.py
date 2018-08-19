@@ -1,6 +1,11 @@
 import math
-from multiprocessing import Lock, Pool
+import traceback
+from multiprocessing import Pool
+
+import multiprocessing
 from random import randint
+
+import sys
 
 from modules.Crowding.crowding import Crowding
 from modules.GCSBase.SingleExampleEvaluation import SingleExampleEvaluation
@@ -12,22 +17,43 @@ from modules.GCSBase.utils.random_utils import RandomUtils
 from modules.GCSBase.utils.symbol_utils import SymbolFinder
 from modules.Parsers.CYK.Base.RulesTableCell import RulesTableCell
 from modules.Parsers.CYK.sGCS.CykValues import CykValues
+from modules.Parsers.CYK.sGCS.ParallelCykOrderedJobs2 import ParallelData
 from modules.Parsers.CYK.sGCS.ProbabilityArrayCell import ProbabilityArrayCell
+from modules.Stochastic.Stochastic import Stochastic
 from modules.Visualisation.iteration import Iteration
 from modules.sGCS.domain.sCellRule import sCellRule
 from modules.sGCS.domain.sRule import sRule
 from modules.sGCS.sGCS_grammar import sGCSGrammar
 from settings.settings import Settings
 
-lock = Lock()
+
+def init_arrays(cyk_values: CykValues):
+    cyk_values.probability_array = []
+    cyk_values.rules_table = []
+    sentence_length = len(cyk_values.sentence)
+    for i in range(sentence_length):
+        cyk_values.probability_array.append([])
+        cyk_values.rules_table.append([])
+        for j in range(sentence_length - i):
+            cyk_values.probability_array[i].append([])
+            cyk_values.rules_table[i].append([])
+            for k in range(len(cyk_values.grammar.nonTerminalSymbols)):
+                cyk_values.probability_array[i][j].append(cyk_values.default_value)
+            cyk_values.parallelData.cyk_probability_array['{}{}'.format(i, j)] = cyk_values.probability_array[i][j]
+            cyk_values.parallelData.cyk_rules_for_cell['{}{}'.format(i, j)] = []
+            if i != 0:
+                cyk_values.parallelData.cyk_parsed_cells['{}{}'.format(i, j)] = False
 
 
 def cyk_result_ladder(sentence: str, grammar: sGCSGrammar, is_sentence_positive: bool, is_learning_on: bool,
-               settings: Settings, crowding: Crowding, iteration: Iteration = None):
-    cyk_values = CykValues(grammar, is_learning_on, sentence, settings, crowding, iteration)
-    __init_probability_array(cyk_values)
+                      settings: Settings, rules_count, crowding: Crowding, iteration: Iteration = None):
+    manager = multiprocessing.Manager()
+    parallelData = ParallelData(manager)
+    cyk_values = CykValues(parallelData, grammar, is_learning_on, sentence, settings, rules_count, crowding, iteration)
+    # __init_probability_array(cyk_values)
     __init_symbols_sequence(cyk_values)
-    __init_rules_table(cyk_values)
+    init_arrays(cyk_values)
+    # __init_rules_table(cyk_values)
     __init_first_row(cyk_values, is_sentence_positive, settings)
     __parse_sentence(cyk_values)
     result = __get_result(cyk_values)
@@ -70,7 +96,8 @@ def __init_symbols_sequence(cyk_values: CykValues):
 
 
 def __init_rules_table(cyk_values: CykValues):
-    cyk_values.rules_table = [[RulesTableCell() for i in range(len(cyk_values.sentence))] for j in range(len(cyk_values.sentence))]
+    cyk_values.rules_table = [[RulesTableCell() for i in range(len(cyk_values.sentence))] for j in
+                              range(len(cyk_values.sentence))]
 
 
 def __init_first_row(cyk_values: CykValues, is_sentence_positive: bool, settings: Settings):
@@ -84,7 +111,7 @@ def __init_first_row(cyk_values: CykValues, is_sentence_positive: bool, settings
                 was = True
                 __init_cell(cyk_values, i, rule)
                 rule.tmp_used = True
-                cyk_values.rules_table[0][i].cell_rules.append(sCellRule(rule))
+                cyk_values.rules_table[0][i].append(sCellRule(rule))
         if not was and is_sentence_positive:
             if len(cyk_values.sequence) > 1:
                 covering = cyk_values.terminal_covering
@@ -95,8 +122,10 @@ def __init_first_row(cyk_values: CykValues, is_sentence_positive: bool, settings
                 new_rule = covering.add_new_rule(cyk_values.grammar, cyk_values.sequence[i])
                 new_rule.tmp_used = True
                 __init_cell(cyk_values, i, new_rule)
-                cyk_values.rules_table[0][i].cell_rules.append(sCellRule(new_rule))
-        cyk_values.rules_table[0][i].parsed = True
+                cyk_values.rules_table[0][i].append(sCellRule(new_rule))
+        cyk_values.parallelData.cyk_parsed_cells['{}{}'.format(0, i)] = True
+        cyk_values.parallelData.cyk_rules_for_cell['{}{}'.format(0, i)] = cyk_values.rules_table[0][i]
+        cyk_values.parallelData.cyk_probability_array['{}{}'.format(0, i)] = cyk_values.probability_array[0][i]
 
 
 def __init_cell(cyk_values: CykValues, index: int, rule: sRule):
@@ -111,48 +140,58 @@ def __init_cell(cyk_values: CykValues, index: int, rule: sRule):
 
 def __parse_sentence(cyk_values: CykValues):
     sequence_length = len(cyk_values.sentence)
-    if sequence_length != 1:
-        pool = Pool(sequence_length - 1)
-        job_args = [(cyk_values, j) for j in range(0, sequence_length - 1)]
-        pool.starmap(__compute_rule, job_args)
-        pool.close()
-        pool.join()
+    cyk_values.parallelData.rules_list = cyk_values.grammar.get_rules()
+    if sequence_length > 1:
+        try:
+            pool = Pool()
+            job_args = [(j, cyk_values.parallelData.cyk_probability_array,
+                         cyk_values.parallelData.cyk_rules_for_cell,
+                         cyk_values.parallelData.rules_list,
+                         cyk_values.sentence,
+                         cyk_values.parallelData.cyk_parsed_cells) for j in range(sequence_length - 1)]
+            pool.starmap(__compute_rule, job_args)
+            pool.close()
+            pool.join()
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except:
+            traceback.print_exc(file=sys.stdout)
 
 
-def __compute_rule(cyk_values: CykValues, j: int):
-
+def __compute_rule(j, pr, rt, rules, sentence, pc):
     i = 1
 
-    while j + i < len(cyk_values.sentence):
-        for rule in cyk_values.grammar.get_rules():
-            for k in range(i):
+    while j + i < len(sentence):
+        rls = list(rules)
+        for k in range(i):
+            for rule in rls:
                 if rule.right2 is not None:
                     first_rule_index = rule.right1.index
                     second_rule_index = rule.right2.index
 
-                    while not cyk_values.rules_table[k][j].parsed \
-                            and not cyk_values.rules_table[i - k - 1][j + k + 1].parsed:
+                    while not pc['{}{}'.format(k, j)] and not pc['{}{}'.format(i - k - 1, j + k + 1)]:
                         continue
 
-                    if cyk_values.probability_array[k][j][first_rule_index] is not None \
-                            and cyk_values.probability_array[i - k - 1][j + k + 1][second_rule_index] is not None:
+                    first_parent_prob = pr['{}{}'.format(k, j)][first_rule_index]
+                    second_parent_prob = pr['{}{}'.format(i - k - 1, j + k + 1)][second_rule_index]
+
+                    if first_parent_prob is not None and second_parent_prob is not None:
                         rule.tmp_used = True
                         rule_left_index = rule.left.index
 
-                        parent_cell_probability = cyk_values.probability_array[k][j][first_rule_index]
-                        parent_cell_2_probability = cyk_values.probability_array[i - k - 1][j + k + 1][
-                            second_rule_index]
-                        current_cell_probability = cyk_values.probability_array[i][j][rule_left_index]
+                        current_cell_probability = pr['{}{}'.format(i, j)]
 
-                        cyk_values.probability_array[i][j][rule_left_index] = \
-                            __calculate_cell(cyk_values, parent_cell_probability, parent_cell_2_probability,
-                                             current_cell_probability, rule)
+                        current_cell_probability[rule_left_index] = Stochastic.new_calculate_cell('BaumWelch', None,
+                                                                                                  first_parent_prob,
+                                                                                                  second_parent_prob,
+                                                                                                  current_cell_probability[rule_left_index],
+                                                                                                  rule)
+                        pr['{}{}'.format(i, j)] = current_cell_probability
                         new_rule = sCellRule(rule, Coordinates(k, j), Coordinates(i - k - 1, j + k + 1))
-
-                        lock.acquire()
-                        cyk_values.rules_table[i][j].cell_rules.append(new_rule)
-                        lock.release()
-        cyk_values.rules_table[i][j].parsed = True
+                        ru_table = rt['{}{}'.format(i, j)]
+                        ru_table.append(new_rule)
+                        rt['{}{}'.format(i, j)] = ru_table
+        pc['{}{}'.format(i, j)] = True
         i = i + 1
 
 
@@ -238,8 +277,8 @@ def __calculate_min_prob_rule_cell_probability(default_value, cell_probability: 
                                       min(min(rule.probability), parent_cell_1_probability.item_1,
                                           parent_cell_2_probability.item_1))
         cell_probability.item_2 = cell_probability.item_2 + rule.probability * \
-                                  parent_cell_1_probability.item_2 * \
-                                  parent_cell_2_probability.item_2
+                                                            parent_cell_1_probability.item_2 * \
+                                                            parent_cell_2_probability.item_2
     return cell_probability
 
 
@@ -452,8 +491,9 @@ def __compute_rules_values(cyk_values: CykValues):
                     for parent_rule_index in range(len(cyk_values.rules_table[i - k - 1][j + k + 1].cell_rules)):
                         # Check whether the rule right 2 (if exists) can be be created from checked parent rule
                         if cyk_values.rules_table[i][j].cell_rules[cell_rule_index].rule.right2 is not None and \
-                                cyk_values.rules_table[i - k - 1][j + k + 1].cell_rules[parent_rule_index].rule.left.value \
-                                == cyk_values.rules_table[i][j].cell_rules[cell_rule_index].rule.right2.value:
+                                        cyk_values.rules_table[i - k - 1][j + k + 1].cell_rules[
+                                            parent_rule_index].rule.left.value \
+                                        == cyk_values.rules_table[i][j].cell_rules[cell_rule_index].rule.right2.value:
                             parent_2 = parent_rule_index
 
                     # If both parents exists
@@ -488,9 +528,11 @@ def __update_rule_profit_and_debt(cyk_values: CykValues, positive: bool):
         for j in range(len(cyk_values.sequence)):
             for k in range(len(cyk_values.rules_table[i][j].cell_rules)):
                 if positive is True:
-                    cyk_values.rules_table[i][j].cell_rules[k].rule.profit += cyk_values.rules_table[i][j].cell_rules[k].tmp_val
+                    cyk_values.rules_table[i][j].cell_rules[k].rule.profit += cyk_values.rules_table[i][j].cell_rules[
+                        k].tmp_val
                 else:
-                    cyk_values.rules_table[i][j].cell_rules[k].rule.debt += cyk_values.rules_table[i][j].cell_rules[k].tmp_val
+                    cyk_values.rules_table[i][j].cell_rules[k].rule.debt += cyk_values.rules_table[i][j].cell_rules[
+                        k].tmp_val
 
 
 def __update_rules_count_after_sentence_parsing(cyk_values: CykValues, learning_on: bool, cyk_start_cell_rules,
