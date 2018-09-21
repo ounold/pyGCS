@@ -1,0 +1,14 @@
+{ "tomita1": ["$->AA;A->AA;A->a", "./NewTestSets/TomitaNew/tomita_1.txt"],
+  "tomita2": ["$->AB;$->CC;C->AB;C->CC;A->a;B->b","./NewTestSets/TomitaNew/tomita_2.txt"],
+  "tomita3": ["$->AE;$->$A;E->A$;H->$B;$->B$;$->HB;A->a;B->b","./NewTestSets/TomitaNew/tomita_3.txt"],
+  "tomita4": ["$->H$;$->BB;$->$A;$->A$;H->$A;A->a;B->b","./NewTestSets/TomitaNew/tomita_4.txt"],
+  "tomita5": ["F->BJ;$->AA;C->$A;$->$$;C->A$;$->AC;$->CC;$->OJ;$->JJ;C->A$;$->BB;R->$A;O->BR;$->FA;J->AB;A->a;B->b","./NewTestSets/TomitaNew/tomita_5.txt"],
+  "tomita6": ["P->$K;K->BB;$->LP;L->$B;B->AA;$->AB;$->$$;$->BK;$->BK;$->BA;A->a;B->b","./NewTestSets/TomitaNew/tomita_6.txt"],
+  "tomita7": ["$->BB;$->BR;$->$A;R->$B;$->AB;A->a;B->b","./NewTestSets/TomitaNew/tomita_7.txt"],
+  "ab": ["E->$B;$->$$;$->BA;$->BO;O->$A;$->AB;$->AE;B->b;A->a","./NewTestSets/ContextFree/short/ab_los_200_30.txt"],
+  "anbn": ["O->A$;$->OB;$->AB;A->a;B->b","./NewTestSets/ContextFree/short/anbn_los_200_15.txt"],
+  "bra1": ["$->AB;A->A$;$->$$;B->b;A->a","./NewTestSets/ContextFree/short/bra1_los2_200_30.txt"],
+  "bra3": ["$->CF;D->$D;$->AD;$->BE;F->$F;K->$E;$->$$;$->BK;D->d;F->f;A->a;C->c;E->e;B->b","./NewTestSets/ContextFree/short/bra3_los_200_30.txt"],
+  "pal2": ["$->BB;H->$B;O->A$;$->OA;$->AA;$->BH;B->b;A->a","./NewTestSets/ContextFree/short/pal2_parz_los_200.txt"]
+  }
+  
